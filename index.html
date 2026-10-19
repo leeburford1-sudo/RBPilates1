@@ -1,0 +1,1592 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FAF7F2">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="RB Pilates">
+<title>RB Pilates</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%235A7869'/%3E%3Ctext x='32' y='41' font-family='Georgia,serif' font-size='26' fill='%23FAF7F2' text-anchor='middle'%3ERB%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.5"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+          serif: ['"Cormorant Garamond"', 'Georgia', 'serif'],
+        },
+        colors: {
+          cream: { DEFAULT: '#FAF7F2', 100: '#F5F0E8', 200: '#EDE6DA' },
+          sage: { 50: '#F2F6F3', 100: '#E3ECE6', 200: '#C8D8CE', 300: '#A9C1B2', 400: '#8FA89A', 500: '#728F80', 600: '#5A7869', 700: '#476052', 800: '#384C41' },
+          clay: { 50: '#FBF1EC', 100: '#F5DFD4', 500: '#B5694B', 600: '#9A5338', 700: '#7E432D' },
+        },
+      },
+    },
+  };
+</script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script>window.react = window.React;</script>
+<script src="https://unpkg.com/lucide-react@0.263.1/dist/umd/lucide-react.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+<style>
+  html, body { background: #FAF7F2; }
+  body { -webkit-tap-highlight-color: transparent; color: #292524; }
+  input[type="date"] { min-height: 3rem; }
+  input[type="number"]::-webkit-inner-spin-button { opacity: .4; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  @media screen { #print-root { display: none; } }
+  @media print {
+    @page { size: A4; margin: 0; }
+    html, body { background: #fff !important; }
+    #root { display: none !important; }
+    #print-root { display: block; }
+    #print-root .invoice-doc { padding: 16mm 16mm 14mm !important; min-height: auto !important; box-shadow: none !important; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body class="font-sans antialiased">
+<div id="root">
+  <div style="min-height:100vh;display:grid;place-items:center;font-family:Georgia,serif;color:#5A7869;font-size:22px">RB Pilates</div>
+</div>
+<div id="print-root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+const LUCIDE = window.LucideReact || window.lucideReact || {};
+const Ic = ({ name, className = 'w-5 h-5', ...p }) => {
+  const C = LUCIDE[name];
+  return C ? <C className={className} strokeWidth={1.75} aria-hidden="true" {...p} /> : <span className={className} />;
+};
+
+/* ------------------------------------------------------------------ */
+/* Constants & helpers                                                 */
+/* ------------------------------------------------------------------ */
+const STORAGE_KEY = 'rbpilates.data.v1';
+const TAB_KEY = 'rbpilates.tab';
+const CLASS_TYPES = ['Mat', 'Reformer', 'Tower', '1:1', 'Studio Cover'];
+const DURATIONS = [45, 50, 55, 60, 75, 90];
+const EXPENSE_CATS = ['Insurance', 'Equipment & Props', 'Music & PPL', 'Training/CPD', 'Branded Uniform', 'Studio Rent', 'Other'];
+const STATUSES = ['Unbilled', 'Invoiced', 'Paid'];
+const HOME_ADDRESS = '2 Gower Lodge, Gower Road, Weybridge, KT13 0ET';
+const TRADING_ALLOWANCE = 1000;
+const FIG_ID = 'studio-fig';
+
+const cx = (...a) => a.filter(Boolean).join(' ');
+const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+const pad = (n) => String(n).padStart(2, '0');
+const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const todayISO = () => toISO(new Date());
+const parseISO = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDays = (s, n) => { const d = parseISO(s); d.setDate(d.getDate() + n); return toISO(d); };
+const fmtDate = (s, opts = { day: 'numeric', month: 'short', year: 'numeric' }) => (s ? parseISO(s).toLocaleDateString('en-GB', opts) : '');
+const monthKey = (s) => s.slice(0, 7);
+const monthLabel = (k) => { const [y, m] = k.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }); };
+const GBP = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' });
+const gbp = (n) => GBP.format(Number(n) || 0);
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const sum = (arr) => round2(arr.reduce((a, b) => a + (Number(b) || 0), 0));
+const taxYearStart = (s) => { const [y, m, d] = s.split('-').map(Number); return m > 4 || (m === 4 && d >= 6) ? y : y - 1; };
+const tyLabel = (y) => `${y}/${pad((y + 1) % 100)}`;
+const inTY = (s, y) => !!s && taxYearStart(s) === y;
+const lineTotal = (s) => round2(s.payType === 'hourly' ? ((Number(s.rate) || 0) * (Number(s.duration) || 0)) / 60 : Number(s.rate) || 0);
+const tripMiles = (t) => round2((Number(t.miles) || 0) * (t.returnTrip ? 2 : 1));
+const studioRate = (st, payType) => (st ? (payType === 'hourly' ? st.hourlyRate : st.flatRate) : '');
+const describeClass = (c) => (c === '1:1' ? '1:1 private session' : c === 'Studio Cover' ? 'Studio cover class' : `${c} class`);
+const rateDetail = (s) => (s.payType === 'hourly' ? `${s.duration} min @ ${gbp(s.rate)}/hr` : `${s.duration} min · flat fee`);
+const formatSortCode = (v) => { const d = String(v).replace(/\D/g, '').slice(0, 6); return d.replace(/(\d{2})(?=\d)/g, '$1-'); };
+
+function mileageForYear(trips, y, settings) {
+  const low = Number(settings.mileageRate) || 0;
+  const high = Number(settings.mileageRateHigh) || 0;
+  const list = trips.filter((t) => inTY(t.date, y)).sort((a, b) => a.date.localeCompare(b.date));
+  let cum = 0;
+  const rows = list.map((t) => {
+    const miles = tripMiles(t);
+    const lowMiles = Math.max(0, Math.min(miles, 10000 - cum));
+    const amount = round2(lowMiles * low + (miles - lowMiles) * high);
+    cum += miles;
+    return { ...t, totalMiles: miles, amount };
+  });
+  return { rows, miles: round2(cum), amount: sum(rows.map((r) => r.amount)) };
+}
+
+function computeStats(db, ty) {
+  const today = todayISO();
+  const tyS = db.sessions.filter((x) => inTY(x.date, ty));
+  const mk = monthKey(today);
+  const mS = db.sessions.filter((x) => monthKey(x.date) === mk);
+  const expenses = sum(db.expenses.filter((x) => inTY(x.date, ty)).map((x) => x.amount));
+  const mileage = mileageForYear(db.trips, ty, db.settings);
+  const gross = sum(tyS.map(lineTotal));
+  const costs = round2(expenses + mileage.amount);
+  const outstanding = db.invoices.filter((i) => i.status !== 'Paid');
+  return {
+    gross,
+    tyCount: tyS.length,
+    invoiced: sum(tyS.filter((x) => x.status !== 'Unbilled').map(lineTotal)),
+    paid: sum(tyS.filter((x) => x.status === 'Paid').map(lineTotal)),
+    monthGross: sum(mS.map(lineTotal)),
+    monthInvoiced: sum(mS.filter((x) => x.status !== 'Unbilled').map(lineTotal)),
+    monthCount: mS.length,
+    expenses,
+    mileage,
+    costs,
+    net: round2(gross - costs),
+    outstandingTotal: sum(outstanding.map((i) => i.total)),
+    outstandingCount: outstanding.length,
+    overdue: outstanding.filter((i) => i.dueDate < today).length,
+    unbilled: sum(db.sessions.filter((x) => x.status === 'Unbilled').map(lineTotal)),
+    unbilledCount: db.sessions.filter((x) => x.status === 'Unbilled').length,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Data & persistence                                                  */
+/* ------------------------------------------------------------------ */
+const defaultData = () => ({
+  version: 1,
+  settings: {
+    businessName: 'RB Pilates',
+    tradingLine: 'Ruby Burford Trading As RB Pilates',
+    address: HOME_ADDRESS,
+    email: '',
+    phone: '',
+    bank: { bankName: '', accountName: 'Ruby Burford', sortCode: '', accountNumber: '' },
+    paymentTermsDays: 14,
+    invoicePrefix: 'RBP',
+    invoiceSeq: {},
+    invoiceNote: 'Not VAT registered. Thank you for your business.',
+    homeAddress: HOME_ADDRESS,
+    mileageRate: 0.45,
+    mileageRateHigh: 0.25,
+    lastBackup: null,
+  },
+  studios: [
+    {
+      id: FIG_ID,
+      name: 'Fig Pilates - Weybridge',
+      invoiceName: 'Fig Pilates',
+      address: 'Weybridge\nSurrey',
+      contact: '',
+      email: '',
+      payType: 'flat',
+      flatRate: 35,
+      hourlyRate: 40,
+      milesOneWay: 1.5,
+    },
+  ],
+  presets: [
+    { id: 'preset-reformer', label: 'Reformer', when: 'Weekly slot', studioId: FIG_ID, classType: 'Reformer', duration: 50, payType: 'flat', rate: '', addMileage: true },
+    { id: 'preset-mat', label: 'Mat', when: 'Weekly slot', studioId: FIG_ID, classType: 'Mat', duration: 45, payType: 'flat', rate: '', addMileage: true },
+    { id: 'preset-tower', label: 'Tower', when: 'Weekly slot', studioId: FIG_ID, classType: 'Tower', duration: 50, payType: 'flat', rate: '', addMileage: true },
+  ],
+  sessions: [],
+  invoices: [],
+  trips: [],
+  expenses: [],
+});
+
+function normalise(d) {
+  const base = defaultData();
+  const s = d.settings || {};
+  return {
+    ...base,
+    ...d,
+    settings: { ...base.settings, ...s, bank: { ...base.settings.bank, ...(s.bank || {}) }, invoiceSeq: { ...(s.invoiceSeq || {}) } },
+    studios: Array.isArray(d.studios) && d.studios.length ? d.studios : base.studios,
+    presets: Array.isArray(d.presets) ? d.presets : base.presets,
+    sessions: Array.isArray(d.sessions) ? d.sessions : [],
+    invoices: Array.isArray(d.invoices) ? d.invoices : [],
+    trips: Array.isArray(d.trips) ? d.trips : [],
+    expenses: Array.isArray(d.expenses) ? d.expenses : [],
+  };
+}
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? normalise(JSON.parse(raw)) : defaultData();
+  } catch (e) {
+    return defaultData();
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* UI primitives                                                       */
+/* ------------------------------------------------------------------ */
+const inputCls = 'w-full h-12 px-3.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-base placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-sage-200 focus:border-sage-500 transition';
+
+function Field({ label, hint, children, className }) {
+  return (
+    <label className={cx('block', className)}>
+      <span className="block text-[13px] font-medium text-stone-600 mb-1.5">{label}</span>
+      {children}
+      {hint && <span className="block text-xs text-stone-500 mt-1.5">{hint}</span>}
+    </label>
+  );
+}
+const Input = (props) => <input {...props} className={cx(inputCls, props.className)} />;
+const Textarea = (props) => <textarea {...props} className={cx(inputCls, 'h-auto py-3 min-h-[92px] leading-relaxed', props.className)} />;
+function Select({ children, className, ...props }) {
+  return (
+    <div className="relative">
+      <select {...props} className={cx(inputCls, 'appearance-none pr-10', className)}>{children}</select>
+      <Ic name="ChevronDown" className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none" />
+    </div>
+  );
+}
+
+function Btn({ variant = 'primary', size = 'md', icon, children, className, ...p }) {
+  const v = {
+    primary: 'bg-stone-900 text-cream hover:bg-stone-800',
+    sage: 'bg-sage-600 text-white hover:bg-sage-700',
+    ghost: 'bg-transparent text-stone-700 hover:bg-stone-200/50',
+    outline: 'bg-white border border-stone-300 text-stone-800 hover:bg-stone-50',
+    danger: 'bg-white border border-clay-100 text-clay-700 hover:bg-clay-50',
+  }[variant];
+  const s = { sm: 'h-9 px-3 text-sm rounded-lg', md: 'h-12 px-5 text-[15px] rounded-xl', lg: 'h-14 px-6 text-base rounded-2xl' }[size];
+  return (
+    <button type="button" {...p} className={cx('inline-flex items-center justify-center gap-2 font-medium transition active:scale-[.98] disabled:opacity-40 disabled:pointer-events-none select-none whitespace-nowrap', v, s, className)}>
+      {icon && <Ic name={icon} className={size === 'sm' ? 'w-4 h-4' : 'w-[18px] h-[18px]'} />}
+      {children}
+    </button>
+  );
+}
+
+function IconBtn({ icon, label, onClick, tone = 'stone' }) {
+  return (
+    <button type="button" onClick={onClick} aria-label={label} title={label}
+      className={cx('w-10 h-10 shrink-0 grid place-items-center rounded-full transition', tone === 'danger' ? 'text-stone-400 hover:text-clay-600 hover:bg-clay-50' : 'text-stone-500 hover:text-stone-900 hover:bg-stone-100')}>
+      <Ic name={icon} className="w-[18px] h-[18px]" />
+    </button>
+  );
+}
+
+function Chips({ options, value, onChange }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((o) => {
+        const val = typeof o === 'object' ? o.value : o;
+        const lab = typeof o === 'object' ? o.label : o;
+        const on = val === value;
+        return (
+          <button type="button" key={val} onClick={() => onChange(val)} aria-pressed={on}
+            className={cx('h-11 min-w-[3rem] px-4 rounded-full border text-[15px] font-medium transition active:scale-[.97]', on ? 'bg-sage-600 border-sage-600 text-white shadow-sm' : 'bg-white border-stone-300 text-stone-700 hover:border-stone-400')}>
+            {lab}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Segmented({ options, value, onChange, className }) {
+  return (
+    <div className={cx('grid grid-flow-col auto-cols-fr p-1 bg-stone-200/60 rounded-xl', className)}>
+      {options.map((o) => (
+        <button type="button" key={o.value} onClick={() => onChange(o.value)} aria-pressed={value === o.value}
+          className={cx('h-10 px-2 rounded-lg text-sm font-medium transition', value === o.value ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800')}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Toggle({ checked, onChange, label, sub }) {
+  return (
+    <button type="button" onClick={() => onChange(!checked)} aria-pressed={checked}
+      className="w-full flex items-center justify-between gap-3 p-3.5 rounded-xl border border-stone-200 bg-cream-100/60 text-left">
+      <span>
+        <span className="block text-[15px] font-medium text-stone-800">{label}</span>
+        {sub && <span className="block text-xs text-stone-500 mt-0.5">{sub}</span>}
+      </span>
+      <span className={cx('relative w-12 h-7 rounded-full transition shrink-0', checked ? 'bg-sage-600' : 'bg-stone-300')}>
+        <span className={cx('absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all', checked ? 'left-6' : 'left-1')} />
+      </span>
+    </button>
+  );
+}
+
+function Card({ title, subtitle, action, children, className }) {
+  return (
+    <section className={cx('bg-white border border-stone-200/80 rounded-2xl p-4 sm:p-6 shadow-[0_1px_2px_rgba(41,37,36,.04)]', className)}>
+      {(title || action) && (
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="min-w-0">
+            {title && <h2 className="font-serif text-[26px] leading-tight text-stone-900">{title}</h2>}
+            {subtitle && <p className="text-sm text-stone-500 mt-0.5">{subtitle}</p>}
+          </div>
+          {action}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
+function Modal({ title, onClose, children, footer, wide }) {
+  useEffect(() => {
+    const h = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', h);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', h); document.body.style.overflow = prev; };
+  }, []);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-stone-900/40 backdrop-blur-[2px]" onClick={onClose} />
+      <div className={cx('relative bg-cream w-full rounded-t-3xl sm:rounded-2xl max-h-[92vh] flex flex-col shadow-2xl', wide ? 'sm:max-w-2xl' : 'sm:max-w-lg')}>
+        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <h3 className="font-serif text-[26px] leading-tight">{title}</h3>
+          <IconBtn icon="X" label="Close" onClick={onClose} />
+        </div>
+        <div className="px-5 pb-5 overflow-y-auto">{children}</div>
+        {footer && <div className="px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-stone-200 flex gap-3 justify-end">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+const STATUS_STYLE = {
+  Unbilled: 'bg-amber-50 text-amber-800 border-amber-200',
+  Invoiced: 'bg-sky-50 text-sky-800 border-sky-200',
+  Paid: 'bg-sage-100 text-sage-800 border-sage-200',
+  Overdue: 'bg-clay-50 text-clay-700 border-clay-100',
+};
+const Pill = ({ status, children }) => (
+  <span className={cx('inline-flex items-center h-7 px-2.5 rounded-full border text-xs font-medium', STATUS_STYLE[status])}>{children || status}</span>
+);
+
+function StatusSelect({ value, onChange }) {
+  return (
+    <div className="relative inline-block">
+      <select value={value} onChange={(e) => onChange(e.target.value)} aria-label="Session status"
+        className={cx('appearance-none h-8 pl-3 pr-7 rounded-full border text-xs font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-sage-200', STATUS_STYLE[value])}>
+        {STATUSES.map((s) => <option key={s}>{s}</option>)}
+      </select>
+      <Ic name="ChevronDown" className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+    </div>
+  );
+}
+
+function Stat({ label, value, sub, icon, tone = 'stone', onClick }) {
+  const toneCls = { stone: 'bg-white', sage: 'bg-sage-50 border-sage-200', clay: 'bg-clay-50 border-clay-100', dark: 'bg-stone-900 border-stone-900 text-cream' }[tone];
+  const El = onClick ? 'button' : 'div';
+  return (
+    <El type={onClick ? 'button' : undefined} onClick={onClick}
+      className={cx('text-left rounded-2xl border border-stone-200/80 p-4 sm:p-5 min-w-0', toneCls, onClick && 'hover:shadow-md transition active:scale-[.99]')}>
+      <div className={cx('flex items-center gap-2 text-[13px] font-medium', tone === 'dark' ? 'text-stone-300' : 'text-stone-500')}>
+        {icon && <Ic name={icon} className="w-4 h-4" />}<span className="truncate">{label}</span>
+      </div>
+      <div className="mt-2 font-serif text-[32px] leading-none tabular">{value}</div>
+      {sub && <div className={cx('mt-2 text-xs leading-snug', tone === 'dark' ? 'text-stone-400' : 'text-stone-500')}>{sub}</div>}
+    </El>
+  );
+}
+
+const Empty = ({ icon, children }) => (
+  <div className="flex flex-col items-center text-center py-8 text-stone-500">
+    <div className="w-12 h-12 rounded-full bg-cream-100 grid place-items-center mb-3"><Ic name={icon} className="w-5 h-5 text-stone-400" /></div>
+    <p className="text-sm max-w-xs">{children}</p>
+  </div>
+);
+
+function TaxYearSelect({ value, onChange, options }) {
+  return (
+    <div className="relative">
+      <select value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label="Tax year"
+        className="appearance-none h-10 pl-3.5 pr-9 rounded-full border border-stone-300 bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-sage-200">
+        {options.map((y) => <option key={y} value={y}>Tax year {tyLabel(y)}</option>)}
+      </select>
+      <Ic name="ChevronDown" className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-stone-500" />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Sessions                                                            */
+/* ------------------------------------------------------------------ */
+function SessionForm({ db, initial, onSave, onCancel, onAddStudio, isEdit }) {
+  const first = db.studios[0];
+  const blank = () => ({ date: todayISO(), studioId: first?.id || '', classType: 'Reformer', duration: '50', payType: first?.payType || 'flat', rate: String(studioRate(first, first?.payType || 'flat') ?? ''), notes: '', addMileage: true });
+  const [f, setF] = useState(() => (initial ? { ...initial, duration: String(initial.duration), rate: String(initial.rate) } : blank()));
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const studio = db.studios.find((s) => s.id === f.studioId);
+  const applyStudio = (st) => setF((p) => { const pt = st.payType || p.payType; return { ...p, studioId: st.id, payType: pt, rate: String(studioRate(st, pt) ?? '') }; });
+  const onStudio = (v) => {
+    if (v === '__new') { onAddStudio(applyStudio); return; }
+    const st = db.studios.find((s) => s.id === v);
+    if (st) applyStudio(st);
+  };
+  const onPay = (t) => setF((p) => ({ ...p, payType: t, rate: studio ? String(studioRate(studio, t) ?? '') : p.rate }));
+  const total = lineTotal(f);
+  const valid = f.date && f.studioId && Number(f.duration) > 0 && f.rate !== '' && Number(f.rate) >= 0;
+  const miles = Number(studio?.milesOneWay) || 0;
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!valid) return;
+    const { addMileage, ...rest } = f;
+    onSave({ ...rest, duration: Number(f.duration), rate: round2(f.rate), notes: f.notes.trim() }, { addMileage });
+    if (!isEdit) setF((p) => ({ ...p, notes: '' }));
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-5">
+      <div className="grid sm:grid-cols-2 gap-4">
+        <Field label="Date"><Input type="date" value={f.date} onChange={(e) => set('date', e.target.value)} required /></Field>
+        <Field label="Studio">
+          <Select value={f.studioId} onChange={(e) => onStudio(e.target.value)}>
+            {db.studios.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            <option value="__new">+ Add New Studio</option>
+          </Select>
+        </Field>
+      </div>
+      <Field label="Class type"><Chips options={CLASS_TYPES} value={f.classType} onChange={(v) => set('classType', v)} /></Field>
+      <Field label="Duration">
+        <div className="flex flex-wrap gap-2 items-center">
+          <Chips options={DURATIONS.map((d) => ({ value: String(d), label: `${d}m` }))} value={f.duration} onChange={(v) => set('duration', v)} />
+          <div className="relative w-28">
+            <Input type="number" inputMode="numeric" min="1" step="1" value={f.duration} onChange={(e) => set('duration', e.target.value)} aria-label="Custom duration in minutes" className="h-11 pr-11" />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-stone-400 pointer-events-none">min</span>
+          </div>
+        </div>
+      </Field>
+      <div className="grid sm:grid-cols-2 gap-4">
+        <Field label="Pay structure">
+          <Segmented value={f.payType} onChange={onPay} options={[{ value: 'flat', label: 'Flat fee per class' }, { value: 'hourly', label: 'Hourly rate' }]} />
+        </Field>
+        <Field label={f.payType === 'hourly' ? 'Agreed rate (£ per hour)' : 'Agreed rate (£ per class)'}>
+          <div className="relative">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none">£</span>
+            <Input type="number" inputMode="decimal" min="0" step="0.01" value={f.rate} onChange={(e) => set('rate', e.target.value)} className="pl-8" required />
+          </div>
+        </Field>
+      </div>
+      <Field label="Notes / studio contact"><Input value={f.notes} onChange={(e) => set('notes', e.target.value)} placeholder="e.g. Covered for Sarah · 6 clients" /></Field>
+      {!isEdit && miles > 0 && (
+        <Toggle checked={f.addMileage} onChange={(v) => set('addMileage', v)} label="Log return mileage"
+          sub={`Home → ${studio.name} and back · ${round2(miles * 2)} mi · ${gbp(miles * 2 * db.settings.mileageRate)} (skipped if already logged for this day)`} />
+      )}
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-3 pt-1">
+        <div className="sm:mr-auto text-sm text-stone-500">Line total <span className="ml-1 font-serif text-2xl text-stone-900 tabular">{gbp(total)}</span></div>
+        {onCancel && <Btn variant="outline" onClick={onCancel}>Cancel</Btn>}
+        <Btn type="submit" variant="sage" size="lg" icon={isEdit ? 'Save' : 'Plus'} disabled={!valid} className="sm:min-w-[200px]">{isEdit ? 'Save changes' : 'Log session'}</Btn>
+      </div>
+    </form>
+  );
+}
+
+function SessionRow({ s, studio, onStatus, onEdit, onDelete }) {
+  const d = parseISO(s.date);
+  return (
+    <li className="flex items-center gap-3 py-3">
+      <div className="w-12 shrink-0 text-center">
+        <div className="text-[11px] uppercase tracking-wider text-stone-500">{d.toLocaleDateString('en-GB', { weekday: 'short' })}</div>
+        <div className="font-serif text-2xl leading-none">{d.getDate()}</div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-stone-900 truncate">{s.classType} <span className="text-stone-400 font-normal">· {s.duration}m</span></div>
+        <div className="text-xs text-stone-500 truncate">{studio?.name || 'Unknown studio'}{s.notes ? ` · ${s.notes}` : ''}</div>
+      </div>
+      <div className="flex flex-col items-end gap-1 shrink-0">
+        <span className="font-medium tabular">{gbp(lineTotal(s))}</span>
+        <StatusSelect value={s.status} onChange={onStatus} />
+      </div>
+      <div className="flex shrink-0 -mr-2">
+        <IconBtn icon="Pencil" label="Edit session" onClick={onEdit} />
+        <IconBtn icon="Trash2" label="Delete session" onClick={onDelete} tone="danger" />
+      </div>
+    </li>
+  );
+}
+
+function QuickLog({ db, onQuickLog, goSettings }) {
+  const [date, setDate] = useState(todayISO());
+  const isToday = date === todayISO();
+  return (
+    <Card title="Quick log" subtitle={isToday ? 'One tap for your regular slots · today' : `Logging for ${fmtDate(date, { weekday: 'long', day: 'numeric', month: 'short' })}`}
+      action={<input type="date" value={date} onChange={(e) => setDate(e.target.value || todayISO())} aria-label="Quick log date"
+        className="h-10 px-3 rounded-full border border-stone-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-200" style={{ minHeight: 0 }} />}>
+      {db.presets.length === 0 ? (
+        <Empty icon="Zap">No quick-log presets yet. <button className="underline" onClick={goSettings}>Add one in Settings</button>.</Empty>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          {db.presets.map((p) => {
+            const st = db.studios.find((s) => s.id === p.studioId);
+            const rate = p.rate === '' || p.rate == null ? studioRate(st, p.payType) : p.rate;
+            const amount = lineTotal({ payType: p.payType, rate, duration: p.duration });
+            return (
+              <button key={p.id} type="button" onClick={() => onQuickLog(p, date)}
+                className="group text-left p-4 rounded-2xl bg-sage-50 border border-sage-200 hover:bg-sage-100 hover:border-sage-300 transition active:scale-[.97] min-h-[96px] flex flex-col">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-medium text-[17px] text-stone-900 leading-tight">{p.label}</span>
+                  <span className="w-8 h-8 shrink-0 rounded-full bg-sage-600 text-white grid place-items-center group-active:bg-sage-700"><Ic name="Plus" className="w-4 h-4" /></span>
+                </div>
+                <div className="text-xs text-stone-500 mt-1">{[p.when, `${p.duration}m`].filter(Boolean).join(' · ')}</div>
+                <div className="mt-auto pt-2 text-sm text-sage-800 truncate">{st ? (st.invoiceName || st.name) : 'Missing studio'} · <span className="tabular">{gbp(amount)}</span></div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function LogTab({ db, actions }) {
+  const months = useMemo(() => {
+    const set = new Set(db.sessions.map((s) => monthKey(s.date)));
+    set.add(monthKey(todayISO()));
+    return [...set].sort().reverse();
+  }, [db.sessions]);
+  const [month, setMonth] = useState(monthKey(todayISO()));
+  const [status, setStatus] = useState('All');
+  const list = db.sessions
+    .filter((s) => (month === 'all' || monthKey(s.date) === month) && (status === 'All' || s.status === status))
+    .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0));
+  return (
+    <div className="space-y-5">
+      <QuickLog db={db} onQuickLog={actions.quickLog} goSettings={() => actions.setTab('settings')} />
+      <Card title="Log a session" subtitle="Anything outside your regular slots">
+        <SessionForm db={db} onSave={actions.logSession} onAddStudio={(cb) => actions.openStudio(null, cb)} />
+      </Card>
+      <Card title="Sessions" subtitle={`${list.length} shown · ${gbp(sum(list.map(lineTotal)))}`}>
+        <div className="grid sm:grid-cols-[220px_1fr] gap-3 mb-2">
+          <Select value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Filter month">
+            <option value="all">All months</option>
+            {months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
+          </Select>
+          <Segmented value={status} onChange={setStatus} options={['All', ...STATUSES].map((s) => ({ value: s, label: s }))} />
+        </div>
+        {list.length === 0 ? <Empty icon="CalendarPlus">No sessions here yet. Use Quick log above to add your first class.</Empty> : (
+          <ul className="divide-y divide-stone-100">
+            {list.map((s) => (
+              <SessionRow key={s.id} s={s} studio={db.studios.find((x) => x.id === s.studioId)}
+                onStatus={(v) => actions.setSessionStatus(s.id, v)} onEdit={() => actions.editSession(s)} onDelete={() => actions.deleteSession(s)} />
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Invoices                                                            */
+/* ------------------------------------------------------------------ */
+function InvoiceDocument({ inv, settings }) {
+  const b = settings.bank;
+  const addr = (settings.address || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return (
+    <div className="invoice-doc bg-white text-stone-900 p-6 sm:p-12 text-[13px] leading-relaxed" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+      <div className="flex flex-col sm:flex-row sm:justify-between gap-6">
+        <div>
+          <div className="font-serif text-[40px] leading-none tracking-wide" style={{ color: '#384C41' }}>{settings.businessName}</div>
+          <div className="mt-3 font-medium">{settings.tradingLine}</div>
+          {addr.map((l, i) => <div key={i} className="text-stone-600">{l}</div>)}
+          {settings.email && <div className="text-stone-600">{settings.email}</div>}
+          {settings.phone && <div className="text-stone-600">{settings.phone}</div>}
+        </div>
+        <div className="sm:text-right">
+          <div className="text-[11px] uppercase tracking-[0.25em] text-stone-500">Invoice</div>
+          <div className="font-serif text-[28px] leading-tight">{inv.number}</div>
+          <table className="mt-2 sm:ml-auto text-[13px]">
+            <tbody>
+              <tr><td className="pr-4 text-stone-500">Invoice date</td><td className="sm:text-right">{fmtDate(inv.date, { day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
+              <tr><td className="pr-4 text-stone-500">Due date</td><td className="sm:text-right">{fmtDate(inv.dueDate, { day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
+              <tr><td className="pr-4 text-stone-500">Period</td><td className="sm:text-right">{inv.periodLabel}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="mt-10">
+        <div className="text-[11px] uppercase tracking-[0.25em] text-stone-500 mb-1">Bill to</div>
+        <div className="font-medium">{inv.recipientName}</div>
+        <div className="text-stone-600 whitespace-pre-line">{inv.recipientAddress}</div>
+      </div>
+
+      <table className="w-full mt-8 border-collapse">
+        <thead>
+          <tr className="text-left text-[11px] uppercase tracking-wider text-stone-500 border-b-2" style={{ borderColor: '#384C41' }}>
+            <th className="py-2 pr-3 font-medium">Date</th>
+            <th className="py-2 pr-3 font-medium">Description</th>
+            <th className="py-2 pr-3 font-medium">Duration / rate</th>
+            <th className="py-2 font-medium text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {inv.lines.map((l, i) => (
+            <tr key={i} className="border-b border-stone-200 align-top" style={{ breakInside: 'avoid' }}>
+              <td className="py-2.5 pr-3 whitespace-nowrap">{fmtDate(l.date, { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+              <td className="py-2.5 pr-3">{l.description}</td>
+              <td className="py-2.5 pr-3 text-stone-600">{l.detail}</td>
+              <td className="py-2.5 text-right tabular whitespace-nowrap">{gbp(l.amount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="flex justify-end mt-4">
+        <table className="w-full max-w-[280px]">
+          <tbody>
+            <tr><td className="py-1 text-stone-500">Subtotal</td><td className="py-1 text-right tabular">{gbp(inv.total)}</td></tr>
+            <tr><td className="py-1 text-stone-500">VAT</td><td className="py-1 text-right text-stone-500">Not applicable</td></tr>
+            <tr className="border-t-2" style={{ borderColor: '#384C41' }}>
+              <td className="pt-2 font-semibold text-[15px]">Total due</td>
+              <td className="pt-2 text-right font-serif text-[26px] leading-none tabular">{gbp(inv.total)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-10 grid sm:grid-cols-2 gap-6" style={{ breakInside: 'avoid' }}>
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.25em] text-stone-500 mb-1">Payment terms</div>
+          <p>Due within {inv.termsDays} days, by {fmtDate(inv.dueDate, { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
+          <p className="text-stone-600">Please use <span className="font-medium text-stone-900">{inv.number}</span> as the payment reference.</p>
+        </div>
+        <div className="rounded-lg p-4" style={{ background: '#F2F6F3' }}>
+          <div className="text-[11px] uppercase tracking-[0.25em] text-stone-500 mb-1">Bank transfer</div>
+          <table className="text-[13px]"><tbody>
+            <tr><td className="pr-4 text-stone-500">Bank</td><td>{b.bankName || '—'}</td></tr>
+            <tr><td className="pr-4 text-stone-500">Account name</td><td>{b.accountName || '—'}</td></tr>
+            <tr><td className="pr-4 text-stone-500">Sort code</td><td className="tabular">{b.sortCode || '—'}</td></tr>
+            <tr><td className="pr-4 text-stone-500">Account no.</td><td className="tabular">{b.accountNumber || '—'}</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+
+      {settings.invoiceNote && <p className="mt-10 pt-4 border-t border-stone-200 text-center text-xs text-stone-500">{settings.invoiceNote}</p>}
+    </div>
+  );
+}
+
+function InvoiceViewer({ inv, settings, onClose, onBank, onTogglePaid }) {
+  useEffect(() => {
+    const h = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', h);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', h); document.body.style.overflow = prev; };
+  }, []);
+  const bankMissing = !settings.bank.sortCode || !settings.bank.accountNumber;
+  const print = () => {
+    const prev = document.title;
+    document.title = `${inv.number} - ${inv.recipientName}`;
+    const restore = () => { document.title = prev; window.removeEventListener('afterprint', restore); };
+    window.addEventListener('afterprint', restore);
+    window.print();
+  };
+  return (
+    <>
+      {ReactDOM.createPortal(<InvoiceDocument inv={inv} settings={settings} />, document.getElementById('print-root'))}
+      <div className="fixed inset-0 z-50 bg-stone-300/90 backdrop-blur-sm flex flex-col" role="dialog" aria-modal="true">
+        <div className="bg-cream border-b border-stone-200 px-3 sm:px-6 py-3 flex items-center gap-2 pt-[max(.75rem,env(safe-area-inset-top))]">
+          <Btn variant="ghost" size="sm" icon="ChevronLeft" onClick={onClose}>Back</Btn>
+          <div className="mr-auto min-w-0 hidden sm:block">
+            <div className="font-serif text-xl leading-tight truncate">{inv.number}</div>
+            <div className="text-xs text-stone-500 truncate">{inv.periodLabel}</div>
+          </div>
+          <div className="ml-auto flex gap-2">
+            <Btn variant="outline" size="sm" icon="Landmark" onClick={onBank}><span className="hidden sm:inline">Bank details</span></Btn>
+            <Btn variant="outline" size="sm" icon={inv.status === 'Paid' ? 'RotateCcw' : 'CheckCircle2'} onClick={onTogglePaid}>{inv.status === 'Paid' ? 'Mark unpaid' : 'Mark paid'}</Btn>
+            <Btn variant="primary" size="sm" icon="Printer" onClick={print}>Print / PDF</Btn>
+          </div>
+        </div>
+        {bankMissing && (
+          <button onClick={onBank} className="bg-amber-50 border-b border-amber-200 text-amber-900 text-sm px-4 py-2.5 flex items-center justify-center gap-2">
+            <Ic name="AlertTriangle" className="w-4 h-4" /> Bank details are missing from this invoice — tap to add them.
+          </button>
+        )}
+        <div className="flex-1 overflow-auto p-3 sm:p-8">
+          <div className="mx-auto max-w-[820px] shadow-2xl rounded-sm overflow-hidden">
+            <InvoiceDocument inv={inv} settings={settings} />
+          </div>
+          <p className="text-center text-xs text-stone-600 mt-4 mb-8">Choose “Save as PDF” in the print dialog. Browser headers and footers are removed automatically.</p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function InvoicesTab({ db, update, notify, actions }) {
+  const s = db.settings;
+  const today = todayISO();
+  const [studioId, setStudioId] = useState(db.studios[0]?.id || '');
+  const studio = db.studios.find((x) => x.id === studioId);
+  const unbilled = db.sessions.filter((x) => x.studioId === studioId && x.status === 'Unbilled');
+  const months = [...new Set(unbilled.map((x) => monthKey(x.date)))].sort().reverse();
+  const [month, setMonth] = useState(months[0] || '');
+  useEffect(() => { if (!months.includes(month)) setMonth(months[0] || ''); }, [studioId, months.join(',')]);
+  const inMonth = unbilled.filter((x) => monthKey(x.date) === month).sort((a, b) => a.date.localeCompare(b.date));
+  const [excluded, setExcluded] = useState({});
+  useEffect(() => setExcluded({}), [studioId, month]);
+  const selected = inMonth.filter((x) => !excluded[x.id]);
+  const total = sum(selected.map(lineTotal));
+
+  const [recName, setRecName] = useState('');
+  const [recAddr, setRecAddr] = useState('');
+  useEffect(() => { setRecName(studio?.invoiceName || studio?.name || ''); setRecAddr(studio?.address || ''); }, [studioId]);
+  const [invDate, setInvDate] = useState(today);
+  const year = (invDate || today).slice(0, 4);
+  const nextNumber = `${s.invoicePrefix}-${year}-${pad3(s.invoiceSeq[year] || 1)}`;
+  const studioDisplay = studio?.invoiceName || studio?.name || '';
+
+  const generate = () => {
+    if (!selected.length || !studio) return;
+    const id = uid();
+    const ids = new Set(selected.map((x) => x.id));
+    const terms = Number(s.paymentTermsDays) || 14;
+    update((d) => {
+      const seq = d.settings.invoiceSeq[year] || 1;
+      d.settings.invoiceSeq[year] = seq + 1;
+      const lines = d.sessions.filter((x) => ids.has(x.id)).sort((a, b) => a.date.localeCompare(b.date))
+        .map((x) => ({ sessionId: x.id, date: x.date, description: describeClass(x.classType), detail: rateDetail(x), amount: lineTotal(x) }));
+      d.sessions.forEach((x) => { if (ids.has(x.id)) { x.status = 'Invoiced'; x.invoiceId = id; } });
+      const st = d.studios.find((z) => z.id === studioId);
+      if (st) { st.invoiceName = recName.trim(); st.address = recAddr.trim(); }
+      d.invoices.push({
+        id, number: `${d.settings.invoicePrefix}-${year}-${pad3(seq)}`, studioId,
+        recipientName: recName.trim() || studio.name, recipientAddress: recAddr.trim(),
+        date: invDate, termsDays: terms, dueDate: addDays(invDate, terms),
+        periodLabel: `${studioDisplay} – ${monthLabel(month)}`,
+        lines, total: sum(lines.map((l) => l.amount)), status: 'Invoiced', paidDate: null, createdAt: Date.now(),
+      });
+    });
+    notify(`Invoice ${nextNumber} created`);
+    actions.openInvoice(id);
+  };
+
+  const invoices = [...db.invoices].sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number));
+
+  return (
+    <div className="space-y-5">
+      <Card title="New invoice" subtitle="Bundle a month of unbilled classes for one studio">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Field label="Studio">
+            <Select value={studioId} onChange={(e) => setStudioId(e.target.value)}>
+              {db.studios.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Month">
+            <Select value={month} onChange={(e) => setMonth(e.target.value)} disabled={!months.length}>
+              {!months.length && <option value="">No unbilled classes</option>}
+              {months.map((m) => <option key={m} value={m}>{studioDisplay} – {monthLabel(m)} ({unbilled.filter((x) => monthKey(x.date) === m).length})</option>)}
+            </Select>
+          </Field>
+        </div>
+
+        {!inMonth.length ? (
+          <Empty icon="FileText">No unbilled classes for {studio?.name || 'this studio'}. Logged classes appear here until they’re invoiced.</Empty>
+        ) : (
+          <>
+            <ul className="mt-4 rounded-xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
+              {inMonth.map((x) => {
+                const on = !excluded[x.id];
+                return (
+                  <li key={x.id}>
+                    <button type="button" onClick={() => setExcluded((p) => ({ ...p, [x.id]: on }))} className={cx('w-full flex items-center gap-3 px-3.5 py-3 text-left transition', on ? 'bg-white' : 'bg-stone-50 text-stone-400')}>
+                      <span className={cx('w-6 h-6 rounded-md border grid place-items-center shrink-0', on ? 'bg-sage-600 border-sage-600 text-white' : 'border-stone-300 bg-white')}>{on && <Ic name="Check" className="w-4 h-4" />}</span>
+                      <span className="w-24 shrink-0 text-sm">{fmtDate(x.date, { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+                      <span className="flex-1 min-w-0 text-sm truncate">{describeClass(x.classType)} <span className="text-stone-400">· {rateDetail(x)}</span></span>
+                      <span className="text-sm font-medium tabular">{gbp(lineTotal(x))}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="grid sm:grid-cols-2 gap-4 mt-5">
+              <Field label="Bill to (saved for this studio)"><Input value={recName} onChange={(e) => setRecName(e.target.value)} placeholder="Studio name" /></Field>
+              <Field label="Invoice date" hint={`Due ${fmtDate(addDays(invDate || today, Number(s.paymentTermsDays) || 14))} · ${s.paymentTermsDays} day terms`}>
+                <Input type="date" value={invDate} onChange={(e) => setInvDate(e.target.value || today)} />
+              </Field>
+              <Field label="Studio address" className="sm:col-span-2"><Textarea value={recAddr} onChange={(e) => setRecAddr(e.target.value)} placeholder={'Street\nTown\nPostcode'} rows={3} /></Field>
+            </div>
+            <div className="mt-5 flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="sm:mr-auto text-sm text-stone-500">{selected.length} {selected.length === 1 ? 'class' : 'classes'} · Total <span className="ml-1 font-serif text-2xl text-stone-900 tabular">{gbp(total)}</span></div>
+              <Btn variant="sage" size="lg" icon="FileText" onClick={generate} disabled={!selected.length}>Generate {nextNumber}</Btn>
+            </div>
+          </>
+        )}
+      </Card>
+
+      <Card title="Invoices" subtitle={`${invoices.length} issued`} action={<Btn variant="outline" size="sm" icon="Landmark" onClick={actions.openBank}>Bank details</Btn>}>
+        {!invoices.length ? <Empty icon="Receipt">Your invoices will be listed here.</Empty> : (
+          <ul className="divide-y divide-stone-100">
+            {invoices.map((inv) => {
+              const overdue = inv.status !== 'Paid' && inv.dueDate < today;
+              return (
+                <li key={inv.id} className="py-3 flex items-center gap-3">
+                  <button type="button" onClick={() => actions.openInvoice(inv.id)} className="flex-1 min-w-0 text-left">
+                    <div className="font-medium tabular">{inv.number}</div>
+                    <div className="text-xs text-stone-500 truncate">{inv.periodLabel} · {inv.lines.length} classes</div>
+                    <div className="text-xs text-stone-500">
+                      {inv.status === 'Paid' ? `Paid ${fmtDate(inv.paidDate)}` : `Due ${fmtDate(inv.dueDate)}`}
+                    </div>
+                  </button>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className="font-medium tabular">{gbp(inv.total)}</span>
+                    <Pill status={overdue ? 'Overdue' : inv.status} />
+                  </div>
+                  <div className="flex shrink-0 -mr-2">
+                    <IconBtn icon="Printer" label="View / print" onClick={() => actions.openInvoice(inv.id)} />
+                    {inv.status !== 'Paid' && <IconBtn icon="CheckCircle2" label="Mark paid" onClick={() => actions.toggleInvoicePaid(inv.id)} />}
+                    <IconBtn icon="Trash2" label="Void invoice" onClick={() => actions.voidInvoice(inv)} tone="danger" />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
+    </div>
+  );
+}
+const pad3 = (n) => String(n).padStart(3, '0');
+
+/* ------------------------------------------------------------------ */
+/* Tax, mileage & expenses                                             */
+/* ------------------------------------------------------------------ */
+function HmrcGauge({ gross, ty }) {
+  const pct = Math.min(100, (gross / TRADING_ALLOWANCE) * 100);
+  const over = gross >= TRADING_ALLOWANCE;
+  const near = !over && pct >= 75;
+  const bar = over ? 'bg-clay-500' : near ? 'bg-amber-500' : 'bg-sage-500';
+  return (
+    <Card className={over ? 'border-clay-100 bg-clay-50/40' : near ? 'border-amber-200 bg-amber-50/40' : ''}>
+      <div className="flex items-start gap-3">
+        <div className={cx('w-11 h-11 rounded-full grid place-items-center shrink-0', over ? 'bg-clay-100 text-clay-700' : near ? 'bg-amber-100 text-amber-800' : 'bg-sage-100 text-sage-700')}>
+          <Ic name={over ? 'AlertTriangle' : near ? 'Info' : 'CheckCircle2'} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="font-serif text-[26px] leading-tight">HMRC £1,000 trading allowance</h2>
+          <p className="text-sm text-stone-500">Gross trading income, tax year {tyLabel(ty)} (6 Apr {ty} – 5 Apr {ty + 1})</p>
+        </div>
+      </div>
+      <div className="mt-5 flex items-end justify-between gap-3">
+        <div className="font-serif text-[40px] leading-none tabular">{gbp(gross)}</div>
+        <div className="text-sm text-stone-500 tabular">{Math.round((gross / TRADING_ALLOWANCE) * 100)}% of £1,000</div>
+      </div>
+      <div className="mt-3 h-3.5 rounded-full bg-stone-200/80 overflow-hidden relative" role="progressbar" aria-valuemin={0} aria-valuemax={1000} aria-valuenow={Math.round(gross)}>
+        <div className={cx('h-full rounded-full transition-all duration-700', bar)} style={{ width: `${pct}%` }} />
+        <div className="absolute top-0 bottom-0 w-px bg-stone-400/70" style={{ left: '75%' }} />
+      </div>
+      <div className="mt-1.5 flex justify-between text-[11px] text-stone-400 tabular"><span>£0</span><span className="ml-[50%]">£750</span><span>£1,000</span></div>
+      <p className={cx('mt-4 text-sm leading-relaxed', over ? 'text-clay-700' : near ? 'text-amber-900' : 'text-stone-600')}>
+        {over ? (
+          <><strong>Threshold passed.</strong> Self Assessment registration is required — register with HMRC by <strong>5 October {ty + 1}</strong> and file your online return by <strong>31 January {ty + 2}</strong>.</>
+        ) : near ? (
+          <><strong>Approaching the threshold.</strong> {gbp(TRADING_ALLOWANCE - gross)} to go before you must register for Self Assessment.</>
+        ) : (
+          <>{gbp(TRADING_ALLOWANCE - gross)} to go. Under £1,000 gross, this income is covered by the trading allowance and you don’t need to register.</>
+        )}
+      </p>
+    </Card>
+  );
+}
+
+function AllowanceCompare({ stats }) {
+  const { gross, costs } = stats;
+  const actual = Math.max(0, round2(gross - costs));
+  const allowance = Math.max(0, round2(gross - TRADING_ALLOWANCE));
+  const best = allowance < actual ? 'allowance' : 'actual';
+  const Row = ({ id, title, sub, value }) => (
+    <div className={cx('rounded-xl border p-4', best === id ? 'border-sage-300 bg-sage-50' : 'border-stone-200 bg-white')}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">{title}</span>
+        {best === id && <span className="text-[11px] font-medium text-sage-700 bg-sage-100 rounded-full px-2 py-0.5">Lower profit</span>}
+      </div>
+      <div className="font-serif text-[28px] leading-tight tabular mt-1">{gbp(value)}</div>
+      <div className="text-xs text-stone-500">{sub}</div>
+    </div>
+  );
+  return (
+    <Card title="Estimated taxable profit" subtitle="You can deduct actual expenses or the £1,000 allowance — not both">
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Row id="actual" title="Actual expenses" value={actual} sub={`${gbp(gross)} − ${gbp(costs)} expenses & mileage`} />
+        <Row id="allowance" title="Trading allowance" value={allowance} sub={`${gbp(gross)} − £1,000 allowance`} />
+      </div>
+      <p className="mt-3 text-xs text-stone-500 leading-relaxed">Estimates only, based on RB Pilates income logged here — not tax advice. Check with HMRC or an accountant before filing.</p>
+    </Card>
+  );
+}
+
+function MileageCard({ db, update, notify, ty }) {
+  const s = db.settings;
+  const first = db.studios[0];
+  const blank = () => ({ date: todayISO(), studioId: first?.id || '__other', to: '', from: s.homeAddress, miles: String(first?.milesOneWay ?? ''), returnTrip: true, purpose: 'Teaching' });
+  const [f, setF] = useState(blank);
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const [routeId, setRouteId] = useState(first?.id || '');
+  const route = db.studios.find((x) => x.id === routeId);
+  const m = mileageForYear(db.trips, ty, s);
+  const preview = round2((Number(f.miles) || 0) * (f.returnTrip ? 2 : 1));
+
+  const onDest = (v) => {
+    const st = db.studios.find((x) => x.id === v);
+    setF((p) => ({ ...p, studioId: v, miles: st ? String(st.milesOneWay ?? '') : p.miles }));
+  };
+  const add = (e) => {
+    e.preventDefault();
+    const st = db.studios.find((x) => x.id === f.studioId);
+    const to = st ? st.name : f.to.trim();
+    if (!f.date || !(Number(f.miles) > 0) || !to) return;
+    const id = uid();
+    update((d) => { d.trips.push({ id, date: f.date, from: f.from.trim() || d.settings.homeAddress, to, studioId: st ? st.id : null, miles: round2(f.miles), returnTrip: f.returnTrip, purpose: f.purpose.trim(), sessionId: null }); });
+    notify(`Trip logged · ${preview} mi`);
+    setF((p) => ({ ...p, purpose: 'Teaching' }));
+  };
+  const saveRouteMiles = (v) => update((d) => { const st = d.studios.find((x) => x.id === routeId); if (st) st.milesOneWay = v === '' ? '' : Number(v); });
+
+  return (
+    <Card title="Mileage" subtitle={`HMRC simplified rate · ${gbp(s.mileageRate)}/mile (first 10,000 mi), ${gbp(s.mileageRateHigh)} after`}>
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        <Stat label={`Miles ${tyLabel(ty)}`} value={m.miles.toLocaleString('en-GB')} icon="Car" />
+        <Stat label="Deduction" value={gbp(m.amount)} icon="PoundSterling" tone="sage" />
+      </div>
+
+      <div className="rounded-2xl border border-stone-200 bg-cream-100/50 p-4 mb-6">
+        <div className="text-[13px] font-medium text-stone-600 mb-3">Pre-configured route</div>
+        <div className="flex gap-3">
+          <div className="flex flex-col items-center pt-1">
+            <span className="w-3 h-3 rounded-full border-2 border-sage-600 bg-white" />
+            <span className="w-px flex-1 bg-stone-300 my-1" />
+            <Ic name="MapPin" className="w-4 h-4 text-sage-700" />
+          </div>
+          <div className="flex-1 min-w-0 space-y-3">
+            <div className="text-sm"><div className="text-xs text-stone-500">From</div>{s.homeAddress}</div>
+            <div className="text-sm">
+              <div className="text-xs text-stone-500 mb-1">To</div>
+              <Select value={routeId} onChange={(e) => setRouteId(e.target.value)} className="h-11">
+                {db.studios.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </Select>
+            </div>
+          </div>
+        </div>
+        {route && (
+          <div className="mt-4 grid grid-cols-[1fr_auto] gap-3 items-end">
+            <Field label="One-way distance (miles)" hint="Check once on a map; it’s saved for this studio.">
+              <Input type="number" inputMode="decimal" min="0" step="0.1" value={route.milesOneWay ?? ''} onChange={(e) => saveRouteMiles(e.target.value)} />
+            </Field>
+            <div className="text-right pb-6">
+              <div className="text-xs text-stone-500">Return trip</div>
+              <div className="font-serif text-2xl tabular">{gbp((Number(route.milesOneWay) || 0) * 2 * s.mileageRate)}</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <form onSubmit={add} className="space-y-4">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Field label="Date"><Input type="date" value={f.date} onChange={(e) => set('date', e.target.value)} required /></Field>
+          <Field label="Destination">
+            <Select value={f.studioId} onChange={(e) => onDest(e.target.value)}>
+              {db.studios.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              <option value="__other">Other destination…</option>
+            </Select>
+          </Field>
+          {f.studioId === '__other' && <Field label="Destination name / address" className="sm:col-span-2"><Input value={f.to} onChange={(e) => set('to', e.target.value)} placeholder="e.g. Equipment supplier, Guildford" required /></Field>}
+          <Field label="One-way miles"><Input type="number" inputMode="decimal" min="0" step="0.1" value={f.miles} onChange={(e) => set('miles', e.target.value)} required /></Field>
+          <Field label="Purpose"><Input value={f.purpose} onChange={(e) => set('purpose', e.target.value)} placeholder="Teaching" /></Field>
+        </div>
+        <Toggle checked={f.returnTrip} onChange={(v) => set('returnTrip', v)} label="Return journey" sub={`${preview} mi · ${gbp(preview * s.mileageRate)}`} />
+        <div className="flex justify-end"><Btn type="submit" variant="sage" icon="Car">Log trip</Btn></div>
+      </form>
+
+      <div className="mt-6">
+        {!m.rows.length ? <Empty icon="Car">No trips in {tyLabel(ty)}. Quick-logged classes add their mileage automatically.</Empty> : (
+          <ul className="divide-y divide-stone-100 border-t border-stone-100">
+            {[...m.rows].reverse().map((t) => (
+              <li key={t.id} className="py-3 flex items-center gap-3">
+                <div className="w-20 shrink-0 text-sm text-stone-600">{fmtDate(t.date, { day: 'numeric', month: 'short' })}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{t.to}</div>
+                  <div className="text-xs text-stone-500 truncate">{t.totalMiles} mi{t.returnTrip ? ' return' : ''}{t.purpose ? ` · ${t.purpose}` : ''}{t.sessionId ? ' · auto' : ''}</div>
+                </div>
+                <div className="text-sm font-medium tabular">{gbp(t.amount)}</div>
+                <IconBtn icon="Trash2" label="Delete trip" tone="danger" onClick={() => update((d) => { d.trips = d.trips.filter((x) => x.id !== t.id); })} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function ExpensesCard({ db, update, notify, ty }) {
+  const blank = () => ({ date: todayISO(), vendor: '', amount: '', category: EXPENSE_CATS[0], notes: '' });
+  const [f, setF] = useState(blank);
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const list = db.expenses.filter((x) => inTY(x.date, ty)).sort((a, b) => b.date.localeCompare(a.date));
+  const total = sum(list.map((x) => x.amount));
+  const byCat = EXPENSE_CATS.map((c) => ({ c, v: sum(list.filter((x) => x.category === c).map((x) => x.amount)) })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
+  const valid = f.date && f.vendor.trim() && Number(f.amount) > 0;
+  const add = (e) => {
+    e.preventDefault();
+    if (!valid) return;
+    const id = uid();
+    update((d) => { d.expenses.push({ id, date: f.date, vendor: f.vendor.trim(), amount: round2(f.amount), category: f.category, notes: f.notes.trim() }); });
+    notify(`Expense added · ${gbp(f.amount)}`);
+    setF((p) => ({ ...blank(), date: p.date, category: p.category }));
+  };
+  return (
+    <Card title="Allowable expenses" subtitle={`${tyLabel(ty)} total ${gbp(total)}`}>
+      <form onSubmit={add} className="space-y-4">
+        <div className="grid sm:grid-cols-3 gap-4">
+          <Field label="Date"><Input type="date" value={f.date} onChange={(e) => set('date', e.target.value)} required /></Field>
+          <Field label="Vendor"><Input value={f.vendor} onChange={(e) => set('vendor', e.target.value)} placeholder="e.g. Balens insurance" required /></Field>
+          <Field label="Amount (£)">
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none">£</span>
+              <Input type="number" inputMode="decimal" min="0" step="0.01" value={f.amount} onChange={(e) => set('amount', e.target.value)} className="pl-8" required />
+            </div>
+          </Field>
+        </div>
+        <Field label="Category"><Chips options={EXPENSE_CATS} value={f.category} onChange={(v) => set('category', v)} /></Field>
+        <Field label="Notes (optional)"><Input value={f.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Receipt ref, what it was for…" /></Field>
+        <div className="flex justify-end"><Btn type="submit" variant="sage" icon="Plus" disabled={!valid}>Add expense</Btn></div>
+      </form>
+
+      {byCat.length > 0 && (
+        <div className="mt-6 space-y-2.5">
+          {byCat.map(({ c, v }) => (
+            <div key={c}>
+              <div className="flex justify-between text-sm"><span className="text-stone-600">{c}</span><span className="tabular font-medium">{gbp(v)}</span></div>
+              <div className="h-2 mt-1 rounded-full bg-stone-100 overflow-hidden"><div className="h-full bg-sage-400 rounded-full" style={{ width: `${(v / total) * 100}%` }} /></div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-6">
+        {!list.length ? <Empty icon="Receipt">No expenses logged for {tyLabel(ty)}.</Empty> : (
+          <ul className="divide-y divide-stone-100 border-t border-stone-100">
+            {list.map((x) => (
+              <li key={x.id} className="py-3 flex items-center gap-3">
+                <div className="w-20 shrink-0 text-sm text-stone-600">{fmtDate(x.date, { day: 'numeric', month: 'short' })}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{x.vendor}</div>
+                  <div className="text-xs text-stone-500 truncate">{x.category}{x.notes ? ` · ${x.notes}` : ''}</div>
+                </div>
+                <div className="text-sm font-medium tabular">{gbp(x.amount)}</div>
+                <IconBtn icon="Trash2" label="Delete expense" tone="danger" onClick={() => { if (confirm(`Delete ${x.vendor} (${gbp(x.amount)})?`)) update((d) => { d.expenses = d.expenses.filter((e) => e.id !== x.id); }); }} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function TaxTab({ db, update, notify, stats, ty, setTy, tyOptions }) {
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-serif text-4xl">Tax &amp; expenses</h1>
+        <TaxYearSelect value={ty} onChange={setTy} options={tyOptions} />
+      </div>
+      <HmrcGauge gross={stats.gross} ty={ty} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Stat label="Gross earned" value={gbp(stats.gross)} sub={`${stats.tyCount} classes`} icon="TrendingUp" />
+        <Stat label="Expenses" value={gbp(stats.expenses)} icon="Receipt" />
+        <Stat label="Mileage" value={gbp(stats.mileage.amount)} sub={`${stats.mileage.miles} miles`} icon="Car" />
+        <Stat label="Est. net profit" value={gbp(stats.net)} sub="Gross − expenses − mileage" icon="Wallet" tone="dark" />
+      </div>
+      <AllowanceCompare stats={stats} />
+      <MileageCard db={db} update={update} notify={notify} ty={ty} />
+      <ExpensesCard db={db} update={update} notify={notify} ty={ty} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Home                                                                */
+/* ------------------------------------------------------------------ */
+function HomeTab({ db, stats, ty, setTy, tyOptions, actions }) {
+  const h = new Date().getHours();
+  const greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  const recent = [...db.sessions].sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 5);
+  const lastBackup = db.settings.lastBackup;
+  const backupDue = db.sessions.length > 0 && (!lastBackup || Date.now() - new Date(lastBackup).getTime() > 30 * 864e5);
+  return (
+    <div className="space-y-5">
+      <div className="flex items-end justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-sm text-stone-500">{fmtDate(todayISO(), { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+          <h1 className="font-serif text-4xl sm:text-5xl leading-tight">{greet}, Ruby</h1>
+        </div>
+        <TaxYearSelect value={ty} onChange={setTy} options={tyOptions} />
+      </div>
+
+      {backupDue && (
+        <button onClick={() => actions.setTab('settings')} className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm text-left">
+          <Ic name="Download" className="w-5 h-5 shrink-0" />
+          <span>{lastBackup ? `Last backup ${new Date(lastBackup).toLocaleDateString('en-GB')}.` : 'Your data lives only in this browser.'} Tap to download a backup.</span>
+        </button>
+      )}
+
+      <QuickLog db={db} onQuickLog={actions.quickLog} goSettings={() => actions.setTab('settings')} />
+
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <Stat label={new Date().toLocaleDateString('en-GB', { month: 'long' })} value={gbp(stats.monthGross)} sub={`${stats.monthCount} classes · ${gbp(stats.monthInvoiced)} invoiced`} icon="CalendarPlus" />
+        <Stat label={`Tax year ${tyLabel(ty)}`} value={gbp(stats.gross)} sub={`${gbp(stats.invoiced)} invoiced · ${gbp(stats.paid)} paid`} icon="TrendingUp" />
+        <Stat label="Unbilled" value={gbp(stats.unbilled)} sub={stats.unbilledCount ? `${stats.unbilledCount} classes · tap to invoice` : 'All caught up'} icon="FileText" tone={stats.unbilledCount ? 'sage' : 'stone'} onClick={() => actions.setTab('invoices')} />
+        <Stat label="Outstanding" value={gbp(stats.outstandingTotal)} sub={stats.overdue ? `${stats.overdue} overdue` : `${stats.outstandingCount} awaiting payment`} icon="Clock" tone={stats.overdue ? 'clay' : 'stone'} onClick={() => actions.setTab('invoices')} />
+        <Stat label="Expenses & mileage" value={gbp(stats.costs)} sub={`${gbp(stats.expenses)} + ${gbp(stats.mileage.amount)} mileage`} icon="Receipt" onClick={() => actions.setTab('tax')} />
+        <Stat label="Est. net profit" value={gbp(stats.net)} sub="Tax year to date, before tax" icon="Wallet" tone="dark" />
+      </div>
+
+      <HmrcGauge gross={stats.gross} ty={ty} />
+
+      <Card title="Recent sessions" action={<Btn variant="ghost" size="sm" onClick={() => actions.setTab('log')}>All <Ic name="ArrowRight" className="w-4 h-4" /></Btn>}>
+        {!recent.length ? <Empty icon="Sparkles">Nothing logged yet. Tap a Quick log slot above after your next class.</Empty> : (
+          <ul className="divide-y divide-stone-100">
+            {recent.map((s) => (
+              <SessionRow key={s.id} s={s} studio={db.studios.find((x) => x.id === s.studioId)}
+                onStatus={(v) => actions.setSessionStatus(s.id, v)} onEdit={() => actions.editSession(s)} onDelete={() => actions.deleteSession(s)} />
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Settings & modals                                                   */
+/* ------------------------------------------------------------------ */
+function StudioModal({ initial, onSave, onClose }) {
+  const [f, setF] = useState(() => initial ? { ...initial } : { id: uid(), name: '', invoiceName: '', address: '', contact: '', email: '', payType: 'flat', flatRate: '', hourlyRate: '', milesOneWay: '' });
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const num = (v) => (v === '' || v == null ? '' : round2(v));
+  const save = () => { if (!f.name.trim()) return; onSave({ ...f, name: f.name.trim(), invoiceName: (f.invoiceName || '').trim() || f.name.trim(), flatRate: num(f.flatRate), hourlyRate: num(f.hourlyRate), milesOneWay: num(f.milesOneWay) }); };
+  return (
+    <Modal title={initial ? 'Edit studio' : 'Add new studio'} onClose={onClose}
+      footer={<><Btn variant="outline" onClick={onClose}>Cancel</Btn><Btn variant="sage" icon="Save" onClick={save} disabled={!f.name.trim()}>Save studio</Btn></>}>
+      <div className="space-y-4">
+        <Field label="Studio name (shown in app)"><Input value={f.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Core Studio - Walton" autoFocus /></Field>
+        <Field label="Invoice to (legal / trading name)"><Input value={f.invoiceName} onChange={(e) => set('invoiceName', e.target.value)} placeholder="e.g. Core Studio Ltd" /></Field>
+        <Field label="Invoice address"><Textarea value={f.address} onChange={(e) => set('address', e.target.value)} placeholder={'Street\nTown\nPostcode'} rows={3} /></Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Contact"><Input value={f.contact} onChange={(e) => set('contact', e.target.value)} placeholder="Manager name" /></Field>
+          <Field label="Email"><Input type="email" value={f.email} onChange={(e) => set('email', e.target.value)} placeholder="accounts@…" /></Field>
+        </div>
+        <Field label="Default pay structure"><Segmented value={f.payType} onChange={(v) => set('payType', v)} options={[{ value: 'flat', label: 'Flat fee' }, { value: 'hourly', label: 'Hourly' }]} /></Field>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Flat £/class"><Input type="number" inputMode="decimal" min="0" step="0.01" value={f.flatRate} onChange={(e) => set('flatRate', e.target.value)} /></Field>
+          <Field label="Hourly £/hr"><Input type="number" inputMode="decimal" min="0" step="0.01" value={f.hourlyRate} onChange={(e) => set('hourlyRate', e.target.value)} /></Field>
+          <Field label="Miles (one way)"><Input type="number" inputMode="decimal" min="0" step="0.1" value={f.milesOneWay} onChange={(e) => set('milesOneWay', e.target.value)} /></Field>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function BankModal({ bank, onSave, onClose }) {
+  const [f, setF] = useState({ ...bank });
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const scOk = !f.sortCode || /^\d{2}-\d{2}-\d{2}$/.test(f.sortCode);
+  const acOk = !f.accountNumber || /^\d{8}$/.test(f.accountNumber);
+  return (
+    <Modal title="Bank details" onClose={onClose}
+      footer={<><Btn variant="outline" onClick={onClose}>Cancel</Btn><Btn variant="sage" icon="Save" onClick={() => onSave(f)}>Save</Btn></>}>
+      <p className="text-sm text-stone-500 mb-4">Printed in the footer of every invoice. Stored only in this browser.</p>
+      <div className="space-y-4">
+        <Field label="Bank name"><Input value={f.bankName} onChange={(e) => set('bankName', e.target.value)} placeholder="e.g. Monzo Business" /></Field>
+        <Field label="Account name"><Input value={f.accountName} onChange={(e) => set('accountName', e.target.value)} /></Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Sort code" hint={!scOk ? 'Format: 12-34-56' : null}><Input inputMode="numeric" value={f.sortCode} onChange={(e) => set('sortCode', formatSortCode(e.target.value))} placeholder="00-00-00" className={!scOk ? 'border-clay-500' : ''} /></Field>
+          <Field label="Account number" hint={!acOk ? '8 digits' : null}><Input inputMode="numeric" value={f.accountNumber} onChange={(e) => set('accountNumber', e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="12345678" className={!acOk ? 'border-clay-500' : ''} /></Field>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function PresetModal({ initial, db, onSave, onClose }) {
+  const [f, setF] = useState(() => initial ? { ...initial, duration: String(initial.duration), rate: initial.rate === '' || initial.rate == null ? '' : String(initial.rate) } : { id: uid(), label: '', when: '', studioId: db.studios[0]?.id || '', classType: 'Reformer', duration: '50', payType: db.studios[0]?.payType || 'flat', rate: '', addMileage: true });
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const st = db.studios.find((x) => x.id === f.studioId);
+  const valid = f.label.trim() && f.studioId && Number(f.duration) > 0;
+  return (
+    <Modal title={initial ? 'Edit quick-log slot' : 'New quick-log slot'} onClose={onClose}
+      footer={<><Btn variant="outline" onClick={onClose}>Cancel</Btn><Btn variant="sage" icon="Save" disabled={!valid} onClick={() => onSave({ ...f, label: f.label.trim(), when: f.when.trim(), duration: Number(f.duration), rate: f.rate === '' ? '' : round2(f.rate) })}>Save</Btn></>}>
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Button label"><Input value={f.label} onChange={(e) => set('label', e.target.value)} placeholder="Tue Reformer" autoFocus /></Field>
+          <Field label="When (optional)"><Input value={f.when} onChange={(e) => set('when', e.target.value)} placeholder="Tue 09:30" /></Field>
+        </div>
+        <Field label="Studio"><Select value={f.studioId} onChange={(e) => set('studioId', e.target.value)}>{db.studios.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</Select></Field>
+        <Field label="Class type"><Chips options={CLASS_TYPES} value={f.classType} onChange={(v) => set('classType', v)} /></Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Duration (min)"><Input type="number" inputMode="numeric" min="1" value={f.duration} onChange={(e) => set('duration', e.target.value)} /></Field>
+          <Field label="Rate (£)" hint={`Blank = studio default (${gbp(studioRate(st, f.payType))})`}><Input type="number" inputMode="decimal" min="0" step="0.01" value={f.rate} onChange={(e) => set('rate', e.target.value)} placeholder="Default" /></Field>
+        </div>
+        <Field label="Pay structure"><Segmented value={f.payType} onChange={(v) => set('payType', v)} options={[{ value: 'flat', label: 'Flat fee' }, { value: 'hourly', label: 'Hourly' }]} /></Field>
+        <Toggle checked={f.addMileage} onChange={(v) => set('addMileage', v)} label="Add return mileage automatically" sub="Only once per studio per day" />
+      </div>
+    </Modal>
+  );
+}
+
+function SettingsTab({ db, update, notify, replaceAll, actions }) {
+  const s = db.settings;
+  const fileRef = useRef(null);
+  const year = todayISO().slice(0, 4);
+  const fig = db.studios.find((x) => x.id === FIG_ID) || db.studios[0];
+  const setS = (k, v) => update((d) => { d.settings[k] = v; });
+  const setFig = (k, v) => update((d) => { const st = d.studios.find((x) => x.id === fig.id); if (st) st[k] = v === '' ? '' : Number(v); });
+
+  const backup = () => {
+    const stamp = new Date().toISOString();
+    const blob = new Blob([JSON.stringify({ ...db, app: 'RB Pilates', exportedAt: stamp }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `rb-pilates-backup-${todayISO()}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    update((d) => { d.settings.lastBackup = stamp; });
+    notify('Backup downloaded');
+  };
+  const restore = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const data = JSON.parse(r.result);
+        if (!data || !Array.isArray(data.sessions) || !data.settings) throw new Error('this isn’t an RB Pilates backup file');
+        const when = data.exportedAt ? new Date(data.exportedAt).toLocaleString('en-GB') : 'unknown date';
+        if (!confirm(`Restore backup from ${when}?\n${data.sessions.length} sessions, ${(data.invoices || []).length} invoices.\n\nThis replaces everything currently in the app.`)) return;
+        replaceAll(normalise(data));
+        notify('Data restored');
+      } catch (err) {
+        notify(`Restore failed: ${err.message}`);
+      } finally {
+        e.target.value = '';
+      }
+    };
+    r.readAsText(file);
+  };
+  const reset = () => {
+    if (!confirm('Erase ALL sessions, invoices, trips and expenses from this browser? Download a backup first if unsure.')) return;
+    if (!confirm('Are you absolutely sure? This cannot be undone.')) return;
+    replaceAll(defaultData());
+    notify('All data erased');
+  };
+  const deleteStudio = (st) => {
+    if (db.sessions.some((x) => x.studioId === st.id) || db.invoices.some((x) => x.studioId === st.id)) { notify('This studio has sessions or invoices, so it can’t be deleted'); return; }
+    if (db.studios.length === 1) { notify('You need at least one studio'); return; }
+    if (!confirm(`Delete ${st.name}?`)) return;
+    update((d) => { d.studios = d.studios.filter((x) => x.id !== st.id); d.presets = d.presets.filter((p) => p.studioId !== st.id); });
+  };
+
+  return (
+    <div className="space-y-5">
+      <h1 className="font-serif text-4xl">Settings</h1>
+
+      {fig && (
+        <Card title="Fig Pilates rates" subtitle="Defaults used when logging classes at Fig">
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Flat fee (£ per class)"><Input type="number" inputMode="decimal" min="0" step="0.01" value={fig.flatRate ?? ''} onChange={(e) => setFig('flatRate', e.target.value)} /></Field>
+            <Field label="Hourly rate (£ per hour)"><Input type="number" inputMode="decimal" min="0" step="0.01" value={fig.hourlyRate ?? ''} onChange={(e) => setFig('hourlyRate', e.target.value)} /></Field>
+          </div>
+          <div className="mt-4"><Field label="Default pay structure"><Segmented value={fig.payType} onChange={(v) => update((d) => { const st = d.studios.find((x) => x.id === fig.id); if (st) st.payType = v; })} options={[{ value: 'flat', label: 'Flat fee per class' }, { value: 'hourly', label: 'Hourly rate' }]} /></Field></div>
+        </Card>
+      )}
+
+      <Card title="Bank details" subtitle="Shown on every invoice" action={<Btn variant="outline" size="sm" icon="Pencil" onClick={actions.openBank}>Edit</Btn>}>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <div><dt className="text-stone-500 text-xs">Bank</dt><dd>{s.bank.bankName || '—'}</dd></div>
+          <div><dt className="text-stone-500 text-xs">Account name</dt><dd>{s.bank.accountName || '—'}</dd></div>
+          <div><dt className="text-stone-500 text-xs">Sort code</dt><dd className="tabular">{s.bank.sortCode || '—'}</dd></div>
+          <div><dt className="text-stone-500 text-xs">Account number</dt><dd className="tabular">{s.bank.accountNumber ? `••••${s.bank.accountNumber.slice(-4)}` : '—'}</dd></div>
+        </dl>
+      </Card>
+
+      <Card title="Business & invoicing" subtitle="Your sole-trader header and numbering">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Field label="Trading name"><Input value={s.businessName} onChange={(e) => setS('businessName', e.target.value)} /></Field>
+          <Field label="Legal line"><Input value={s.tradingLine} onChange={(e) => setS('tradingLine', e.target.value)} /></Field>
+          <Field label="Business address" className="sm:col-span-2" hint="Separate lines with commas"><Input value={s.address} onChange={(e) => setS('address', e.target.value)} /></Field>
+          <Field label="Email (optional)"><Input type="email" value={s.email} onChange={(e) => setS('email', e.target.value)} /></Field>
+          <Field label="Phone (optional)"><Input type="tel" value={s.phone} onChange={(e) => setS('phone', e.target.value)} /></Field>
+          <Field label="Payment terms (days)"><Input type="number" inputMode="numeric" min="0" value={s.paymentTermsDays} onChange={(e) => setS('paymentTermsDays', e.target.value === '' ? '' : Number(e.target.value))} /></Field>
+          <Field label="Invoice prefix"><Input value={s.invoicePrefix} onChange={(e) => setS('invoicePrefix', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} /></Field>
+          <Field label={`Next invoice number for ${year}`} hint={`Next: ${s.invoicePrefix}-${year}-${pad3(s.invoiceSeq[year] || 1)}`}>
+            <Input type="number" inputMode="numeric" min="1" value={s.invoiceSeq[year] || 1} onChange={(e) => update((d) => { d.settings.invoiceSeq[year] = Math.max(1, parseInt(e.target.value, 10) || 1); })} />
+          </Field>
+          <Field label="Invoice footer note"><Input value={s.invoiceNote} onChange={(e) => setS('invoiceNote', e.target.value)} /></Field>
+        </div>
+      </Card>
+
+      <Card title="Studios" subtitle="Invoice addresses, default rates and mileage" action={<Btn variant="outline" size="sm" icon="Plus" onClick={() => actions.openStudio(null)}>Add</Btn>}>
+        <ul className="divide-y divide-stone-100">
+          {db.studios.map((st) => (
+            <li key={st.id} className="py-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-sage-100 text-sage-700 grid place-items-center shrink-0"><Ic name="Building2" className="w-[18px] h-[18px]" /></div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium truncate">{st.name}</div>
+                <div className="text-xs text-stone-500 truncate">{st.payType === 'hourly' ? `${gbp(st.hourlyRate)}/hr` : `${gbp(st.flatRate)}/class`} · {st.milesOneWay || 0} mi each way</div>
+              </div>
+              <IconBtn icon="Pencil" label="Edit studio" onClick={() => actions.openStudio(st)} />
+              <IconBtn icon="Trash2" label="Delete studio" tone="danger" onClick={() => deleteStudio(st)} />
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <Card title="Quick-log slots" subtitle="Your regular weekly classes" action={<Btn variant="outline" size="sm" icon="Plus" onClick={() => actions.openPreset(null)}>Add</Btn>}>
+        {!db.presets.length ? <Empty icon="Zap">No slots yet.</Empty> : (
+          <ul className="divide-y divide-stone-100">
+            {db.presets.map((p) => (
+              <li key={p.id} className="py-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-cream-100 text-stone-600 grid place-items-center shrink-0"><Ic name="Zap" className="w-[18px] h-[18px]" /></div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium truncate">{p.label}{p.when ? <span className="text-stone-400 font-normal"> · {p.when}</span> : null}</div>
+                  <div className="text-xs text-stone-500 truncate">{p.classType} · {p.duration}m · {db.studios.find((x) => x.id === p.studioId)?.name || 'Missing studio'}</div>
+                </div>
+                <IconBtn icon="Pencil" label="Edit slot" onClick={() => actions.openPreset(p)} />
+                <IconBtn icon="Trash2" label="Delete slot" tone="danger" onClick={() => update((d) => { d.presets = d.presets.filter((x) => x.id !== p.id); })} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card title="Mileage" subtitle="Origin and HMRC approved rates">
+        <div className="grid sm:grid-cols-3 gap-4">
+          <Field label="Start address" className="sm:col-span-3"><Input value={s.homeAddress} onChange={(e) => setS('homeAddress', e.target.value)} /></Field>
+          <Field label="Rate, first 10,000 mi (£)"><Input type="number" inputMode="decimal" min="0" step="0.01" value={s.mileageRate} onChange={(e) => setS('mileageRate', e.target.value === '' ? '' : Number(e.target.value))} /></Field>
+          <Field label="Rate after 10,000 mi (£)"><Input type="number" inputMode="decimal" min="0" step="0.01" value={s.mileageRateHigh} onChange={(e) => setS('mileageRateHigh', e.target.value === '' ? '' : Number(e.target.value))} /></Field>
+        </div>
+      </Card>
+
+      <Card title="Your data" subtitle="Everything is saved in this browser on this device">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Btn variant="sage" icon="Download" onClick={backup}>Backup data</Btn>
+          <Btn variant="outline" icon="Upload" onClick={() => fileRef.current && fileRef.current.click()}>Restore data</Btn>
+          <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={restore} />
+        </div>
+        <p className="mt-3 text-xs text-stone-500">{s.lastBackup ? `Last backup ${new Date(s.lastBackup).toLocaleString('en-GB')}.` : 'No backup yet.'} Clearing browser data deletes everything — back up monthly and keep the file somewhere safe (iCloud, Google Drive). Restoring on another device moves your data there.</p>
+        <div className="mt-5 pt-5 border-t border-stone-100"><Btn variant="danger" size="sm" icon="Trash2" onClick={reset}>Erase all data</Btn></div>
+      </Card>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* App shell                                                           */
+/* ------------------------------------------------------------------ */
+const TABS = [
+  { id: 'home', label: 'Home', icon: 'Home' },
+  { id: 'log', label: 'Log', icon: 'CalendarPlus' },
+  { id: 'invoices', label: 'Invoices', icon: 'FileText' },
+  { id: 'tax', label: 'Tax', icon: 'Calculator' },
+  { id: 'settings', label: 'Settings', icon: 'Settings' },
+];
+
+function App() {
+  const [db, setDb] = useState(loadData);
+  const [tab, setTabState] = useState(() => { try { return localStorage.getItem(TAB_KEY) || 'home'; } catch (e) { return 'home'; } });
+  const [toast, setToast] = useState(null);
+  const [ty, setTy] = useState(() => taxYearStart(todayISO()));
+  const [studioModal, setStudioModal] = useState(null);
+  const [presetModal, setPresetModal] = useState(null);
+  const [bankOpen, setBankOpen] = useState(false);
+  const [invoiceId, setInvoiceId] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const saveWarned = useRef(false);
+
+  const notify = useCallback((msg, action) => setToast({ msg, action, key: Date.now() }), []);
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
+    catch (e) { if (!saveWarned.current) { saveWarned.current = true; notify('Couldn’t save in this browser — use Backup data in Settings'); } }
+  }, [db]);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), toast.action ? 6000 : 3200); return () => clearTimeout(t); }, [toast]);
+
+  const update = useCallback((fn) => setDb((d) => { const n = structuredClone(d); fn(n); return n; }), []);
+  const setTab = (t) => { setTabState(t); try { localStorage.setItem(TAB_KEY, t); } catch (e) {} window.scrollTo({ top: 0 }); };
+
+  const tyOptions = useMemo(() => {
+    const set = new Set([taxYearStart(todayISO())]);
+    [...db.sessions, ...db.trips, ...db.expenses].forEach((x) => x.date && set.add(taxYearStart(x.date)));
+    return [...set].sort((a, b) => b - a);
+  }, [db]);
+  const stats = useMemo(() => computeStats(db, ty), [db, ty]);
+
+  const logSession = (data, { addMileage } = {}) => {
+    const id = uid();
+    const tripId = uid();
+    const studio = db.studios.find((s) => s.id === data.studioId);
+    const miles = Number(studio?.milesOneWay) || 0;
+    const tripExists = db.trips.some((t) => t.date === data.date && t.studioId === data.studioId);
+    const withTrip = !!addMileage && miles > 0 && !tripExists;
+    update((d) => {
+      d.sessions.push({ ...data, id, status: 'Unbilled', invoiceId: null, createdAt: Date.now() });
+      if (withTrip) d.trips.push({ id: tripId, date: data.date, from: d.settings.homeAddress, to: studio.name, studioId: studio.id, miles, returnTrip: true, purpose: describeClass(data.classType), sessionId: id });
+    });
+    notify(`${data.classType} logged · ${gbp(lineTotal(data))}${withTrip ? ` · ${round2(miles * 2)} mi` : ''}`, {
+      label: 'Undo',
+      fn: () => update((d) => { d.sessions = d.sessions.filter((s) => s.id !== id); d.trips = d.trips.filter((t) => t.id !== tripId); }),
+    });
+  };
+
+  const actions = {
+    setTab,
+    logSession,
+    quickLog: (p, date) => {
+      const st = db.studios.find((s) => s.id === p.studioId);
+      if (!st) { notify('That slot’s studio no longer exists — edit it in Settings'); return; }
+      const rate = p.rate === '' || p.rate == null ? studioRate(st, p.payType) : p.rate;
+      logSession({ date, studioId: st.id, classType: p.classType, duration: Number(p.duration), payType: p.payType, rate: round2(rate), notes: '' }, { addMileage: p.addMileage });
+    },
+    setSessionStatus: (id, status) => update((d) => { const s = d.sessions.find((x) => x.id === id); if (s) s.status = status; }),
+    editSession: (s) => setEditing(s),
+    deleteSession: (s) => {
+      const msg = s.invoiceId ? `This ${s.classType} class is on an invoice. Delete it anyway? (The invoice itself won’t change.)` : `Delete ${s.classType} on ${fmtDate(s.date)}?`;
+      if (!confirm(msg)) return;
+      update((d) => { d.sessions = d.sessions.filter((x) => x.id !== s.id); d.trips = d.trips.filter((t) => t.sessionId !== s.id); });
+      notify('Session deleted');
+    },
+    openStudio: (studio, onDone) => setStudioModal({ studio, onDone }),
+    openPreset: (preset) => setPresetModal({ preset }),
+    openBank: () => setBankOpen(true),
+    openInvoice: (id) => setInvoiceId(id),
+    toggleInvoicePaid: (id) => {
+      const inv = db.invoices.find((i) => i.id === id);
+      if (!inv) return;
+      const paid = inv.status !== 'Paid';
+      update((d) => {
+        const i = d.invoices.find((x) => x.id === id);
+        i.status = paid ? 'Paid' : 'Invoiced';
+        i.paidDate = paid ? todayISO() : null;
+        d.sessions.forEach((s) => { if (s.invoiceId === id) s.status = paid ? 'Paid' : 'Invoiced'; });
+      });
+      notify(paid ? `${inv.number} marked paid` : `${inv.number} marked unpaid`);
+    },
+    voidInvoice: (inv) => {
+      if (!confirm(`Void ${inv.number}? Its classes go back to Unbilled.`)) return;
+      update((d) => {
+        d.sessions.forEach((s) => { if (s.invoiceId === inv.id) { s.status = 'Unbilled'; s.invoiceId = null; } });
+        d.invoices = d.invoices.filter((i) => i.id !== inv.id);
+        const yr = inv.date.slice(0, 4);
+        const seq = d.settings.invoiceSeq[yr] || 1;
+        if (`${d.settings.invoicePrefix}-${yr}-${pad3(seq - 1)}` === inv.number) d.settings.invoiceSeq[yr] = seq - 1;
+      });
+      if (invoiceId === inv.id) setInvoiceId(null);
+      notify(`${inv.number} voided`);
+    },
+  };
+
+  const viewing = invoiceId && db.invoices.find((i) => i.id === invoiceId);
+  const common = { db, update, notify, actions };
+
+  return (
+    <div className="min-h-screen bg-cream text-stone-800">
+      <header className="sticky top-0 z-30 bg-cream/85 backdrop-blur-md border-b border-stone-200/70 pt-[env(safe-area-inset-top)]">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-3">
+          <button onClick={() => setTab('home')} className="flex items-center gap-2.5">
+            <span className="w-9 h-9 rounded-full bg-sage-600 text-cream grid place-items-center font-serif text-[15px] tracking-wide">RB</span>
+            <span className="text-left leading-tight">
+              <span className="block font-serif text-[22px] text-stone-900">RB Pilates</span>
+              <span className="block text-[10px] uppercase tracking-[0.2em] text-stone-500 -mt-0.5">Studio ledger</span>
+            </span>
+          </button>
+          <nav className="ml-auto hidden sm:flex items-center gap-1" aria-label="Main">
+            {TABS.map((t) => (
+              <button key={t.id} onClick={() => setTab(t.id)} aria-current={tab === t.id ? 'page' : undefined}
+                className={cx('h-10 px-3.5 rounded-full text-sm font-medium flex items-center gap-2 transition', tab === t.id ? 'bg-stone-900 text-cream' : 'text-stone-600 hover:bg-stone-200/60')}>
+                <Ic name={t.icon} className="w-4 h-4" />{t.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-5 sm:pt-8 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pb-16">
+        {tab === 'home' && <HomeTab {...common} stats={stats} ty={ty} setTy={setTy} tyOptions={tyOptions} />}
+        {tab === 'log' && <LogTab {...common} />}
+        {tab === 'invoices' && <InvoicesTab {...common} />}
+        {tab === 'tax' && <TaxTab {...common} stats={stats} ty={ty} setTy={setTy} tyOptions={tyOptions} />}
+        {tab === 'settings' && <SettingsTab {...common} replaceAll={setDb} />}
+      </main>
+
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-cream/95 backdrop-blur-md border-t border-stone-200 pb-[env(safe-area-inset-bottom)]" aria-label="Main">
+        <div className="grid grid-cols-5">
+          {TABS.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)} aria-current={tab === t.id ? 'page' : undefined}
+              className={cx('h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition', tab === t.id ? 'text-sage-700' : 'text-stone-500')}>
+              <span className={cx('w-12 h-7 rounded-full grid place-items-center transition', tab === t.id && 'bg-sage-100')}><Ic name={t.icon} className="w-5 h-5" /></span>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {toast && (
+        <div key={toast.key} className="fixed z-[60] left-1/2 -translate-x-1/2 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] sm:bottom-8 w-[calc(100%-2rem)] max-w-md" role="status" aria-live="polite">
+          <div className="flex items-center gap-3 bg-stone-900 text-cream rounded-2xl pl-4 pr-2 py-2 shadow-2xl min-h-[52px]">
+            <Ic name="CheckCircle2" className="w-5 h-5 text-sage-300 shrink-0" />
+            <span className="flex-1 text-sm">{toast.msg}</span>
+            {toast.action && (
+              <button onClick={() => { toast.action.fn(); setToast(null); }} className="h-10 px-3 rounded-xl text-sm font-medium text-sage-200 hover:bg-white/10 flex items-center gap-1.5">
+                <Ic name="Undo2" className="w-4 h-4" />{toast.action.label}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {editing && (
+        <Modal title="Edit session" onClose={() => setEditing(null)} wide>
+          <SessionForm db={db} initial={editing} isEdit onCancel={() => setEditing(null)} onAddStudio={(cb) => actions.openStudio(null, cb)}
+            onSave={(data) => { update((d) => { const i = d.sessions.findIndex((x) => x.id === editing.id); if (i >= 0) d.sessions[i] = { ...d.sessions[i], ...data }; }); setEditing(null); notify('Session updated'); }} />
+        </Modal>
+      )}
+
+      {studioModal && (
+        <StudioModal initial={studioModal.studio} onClose={() => setStudioModal(null)}
+          onSave={(st) => {
+            const isNew = !db.studios.some((x) => x.id === st.id);
+            update((d) => { if (isNew) d.studios.push(st); else d.studios = d.studios.map((x) => (x.id === st.id ? st : x)); });
+            if (studioModal.onDone) studioModal.onDone(st);
+            setStudioModal(null);
+            notify(isNew ? `${st.name} added` : 'Studio saved');
+          }} />
+      )}
+
+      {presetModal && (
+        <PresetModal initial={presetModal.preset} db={db} onClose={() => setPresetModal(null)}
+          onSave={(p) => { update((d) => { const i = d.presets.findIndex((x) => x.id === p.id); if (i >= 0) d.presets[i] = p; else d.presets.push(p); }); setPresetModal(null); notify('Quick-log slot saved'); }} />
+      )}
+
+      {bankOpen && (
+        <BankModal bank={db.settings.bank} onClose={() => setBankOpen(false)}
+          onSave={(b) => { update((d) => { d.settings.bank = b; }); setBankOpen(false); notify('Bank details saved'); }} />
+      )}
+
+      {viewing && (
+        <InvoiceViewer inv={viewing} settings={db.settings} onClose={() => setInvoiceId(null)}
+          onBank={() => setBankOpen(true)} onTogglePaid={() => actions.toggleInvoicePaid(viewing.id)} />
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
