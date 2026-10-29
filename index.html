@@ -33,7 +33,7 @@
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script>window.react = window.React;</script>
 <script src="https://unpkg.com/lucide-react@0.263.1/dist/umd/lucide-react.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
 <style>
   html, body { background: #FAF7F2; }
@@ -672,6 +672,116 @@ function InvoiceDocument({ inv, settings, flush }) {
   );
 }
 
+// Draws the invoice straight onto an A4 page (vector text), so the result never depends on the phone's screen width.
+function buildInvoicePdf(inv, settings) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const W = 210, H = 297, M = 18, R = W - M, BOTTOM = H - 26;
+  const INK = [41, 37, 36], MUTED = [120, 113, 108], SAGE = [56, 76, 65], RULE = [214, 211, 209];
+  const LONG = { day: 'numeric', month: 'long', year: 'numeric' };
+  const LH = 4.7;
+  doc.setLineHeightFactor(1.4);
+  const font = (style = 'normal', size = 9.5, fam = 'helvetica') => { doc.setFont(fam, style); doc.setFontSize(size); };
+  const ink = (c) => doc.setTextColor(...c);
+  const spaced = (t, x, y, right) => {
+    font('normal', 7.5); ink(MUTED);
+    const txt = t.toUpperCase();
+    const w = doc.getTextWidth(txt) + 0.6 * (txt.length - 1);
+    doc.setCharSpace(0.6); doc.text(txt, right ? x - w : x, y); doc.setCharSpace(0);
+  };
+  const rule = (x1, y1, x2, c, w) => { doc.setDrawColor(...c); doc.setLineWidth(w); doc.line(x1, y1, x2, y1); };
+
+  // Header: business (left) and invoice details (right)
+  font('normal', 28, 'times'); ink(SAGE);
+  doc.text(settings.businessName || 'RB Pilates', M, M + 8);
+  let ly = M + 16;
+  font('bold', 9.5); ink(INK); doc.text(settings.tradingLine || '', M, ly); ly += LH + 0.3;
+  font('normal', 9.5); ink(MUTED);
+  const addr = (settings.address || '').split(',').map((x) => x.trim()).filter(Boolean);
+  [...addr, settings.email, settings.phone].filter(Boolean).forEach((l) => { doc.text(l, M, ly); ly += LH; });
+
+  let ry = M + 1;
+  spaced('Invoice', R, ry, true); ry += 8;
+  font('normal', 18, 'times'); ink(INK); doc.text(inv.number, R, ry, { align: 'right' }); ry += 7;
+  [['Invoice date', fmtDate(inv.date, LONG)], ['Due date', fmtDate(inv.dueDate, LONG)], ['Period', inv.periodLabel || '']].forEach(([k, v]) => {
+    font('normal', 9.5); ink(MUTED); doc.text(k, 120, ry);
+    ink(INK); const lines = doc.splitTextToSize(v, R - 144); doc.text(lines, R, ry, { align: 'right' });
+    ry += LH * lines.length;
+  });
+
+  // Bill to
+  let y = Math.max(ly, ry) + 9;
+  spaced('Bill to', M, y); y += 5.5;
+  font('bold', 10); ink(INK); doc.text(inv.recipientName || '', M, y); y += LH + 0.3;
+  font('normal', 9.5); ink(MUTED);
+  const to = doc.splitTextToSize(inv.recipientAddress || '', 95);
+  if (to.length) { doc.text(to, M, y); y += to.length * LH; }
+  y += 8;
+
+  // Line items
+  const C = { date: M, desc: M + 30, detail: M + 88 };
+  const newPage = () => { doc.addPage(); y = M + 4; font('normal', 9); ink(MUTED); doc.text(`${inv.number} (continued)`, M, y); y += 11; };
+  const tableHead = () => {
+    spaced('Date', C.date, y); spaced('Description', C.desc, y); spaced('Duration / rate', C.detail, y); spaced('Amount', R, y, true);
+    y += 2.6; rule(M, y, R, SAGE, 0.5); y += 6;
+  };
+  tableHead();
+  inv.lines.forEach((l) => {
+    font('normal', 9.5);
+    const d = doc.splitTextToSize(l.description || '', 54);
+    const t = doc.splitTextToSize(l.detail || '', 56);
+    const n = Math.max(d.length, t.length, 1);
+    if (y + (n - 1) * LH + 3 > BOTTOM) { newPage(); tableHead(); font('normal', 9.5); }
+    ink(INK); doc.text(fmtDate(l.date, { day: '2-digit', month: 'short', year: 'numeric' }), C.date, y);
+    doc.text(d, C.desc, y);
+    ink(MUTED); doc.text(t, C.detail, y);
+    ink(INK); doc.text(gbp(l.amount), R, y, { align: 'right' });
+    const rowEnd = y + (n - 1) * LH + 2.4;
+    rule(M, rowEnd, R, RULE, 0.2);
+    y = rowEnd + 5;
+  });
+
+  // Totals
+  if (y + 24 > BOTTOM) newPage();
+  y += 2;
+  const tx = R - 72;
+  font('normal', 9.5); ink(MUTED); doc.text('Subtotal', tx, y); ink(INK); doc.text(gbp(inv.total), R, y, { align: 'right' }); y += 5.5;
+  ink(MUTED); doc.text('VAT', tx, y); doc.text('Not applicable', R, y, { align: 'right' }); y += 3;
+  rule(tx, y, R, SAGE, 0.5); y += 7.5;
+  font('bold', 11); ink(INK); doc.text('Total due', tx, y);
+  font('bold', 17, 'times'); doc.text(gbp(inv.total), R, y + 0.5, { align: 'right' });
+  y += 16;
+
+  // Payment terms and bank details
+  if (y + 34 > BOTTOM) newPage();
+  spaced('Payment terms', M, y);
+  let py = y + 5.5;
+  font('normal', 9.5); ink(INK);
+  const terms = doc.splitTextToSize(`Due within ${inv.termsDays} days, by ${fmtDate(inv.dueDate, LONG)}.`, 82);
+  doc.text(terms, M, py); py += terms.length * LH;
+  ink(MUTED); doc.text(doc.splitTextToSize(`Please use ${inv.number} as the payment reference.`, 82), M, py);
+
+  const b = settings.bank || {};
+  const bx = 112;
+  doc.setFillColor(242, 246, 243); doc.roundedRect(bx, y - 5, R - bx, 31, 2, 2, 'F');
+  spaced('Bank transfer', bx + 5, y + 0.5);
+  let by = y + 6.5;
+  [['Bank', b.bankName], ['Account name', b.accountName], ['Sort code', b.sortCode], ['Account no.', b.accountNumber]].forEach(([k, v]) => {
+    font('normal', 9.5); ink(MUTED); doc.text(k, bx + 5, by); ink(INK); doc.text(v || '—', bx + 33, by); by += 5;
+  });
+
+  // Footer note and page numbers
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    font('normal', 8); ink(MUTED);
+    if (i === pages && settings.invoiceNote) { rule(M, H - 19, R, RULE, 0.2); doc.text(settings.invoiceNote, W / 2, H - 13.5, { align: 'center' }); }
+    if (pages > 1) doc.text(`Page ${i} of ${pages}`, R, H - 8, { align: 'right' });
+  }
+  doc.setProperties({ title: `${inv.number} - ${settings.businessName || 'RB Pilates'}`, subject: inv.periodLabel || '', author: 'Ruby Burford' });
+  return doc.output('blob');
+}
+
 function InvoiceViewer({ inv, settings, onClose, onBank, onTogglePaid }) {
   useEffect(() => {
     const h = (e) => e.key === 'Escape' && onClose();
@@ -681,7 +791,6 @@ function InvoiceViewer({ inv, settings, onClose, onBank, onTogglePaid }) {
     return () => { window.removeEventListener('keydown', h); document.body.style.overflow = prev; };
   }, []);
   const bankMissing = !settings.bank.sortCode || !settings.bank.accountNumber;
-  const docRef = useRef(null);
   const [pdfState, setPdfState] = useState('idle'); // idle | busy | ready
   const [pdfFile, setPdfFile] = useState(null);
   const filename = `${inv.number}.pdf`;
@@ -715,16 +824,8 @@ function InvoiceViewer({ inv, settings, onClose, onBank, onTogglePaid }) {
     try {
       let file = pdfFile;
       if (!file) {
-        if (!window.html2pdf) throw new Error('PDF tool didn’t load — check your connection and reload');
-        setPdfState('busy');
-        const blob = await window.html2pdf().set({
-          margin: [14, 14, 14, 14],
-          filename,
-          image: { type: 'jpeg', quality: 0.96 },
-          html2canvas: { scale: 2, windowWidth: 900, backgroundColor: '#ffffff', useCORS: true },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' },
-        }).from(docRef.current).outputPdf('blob');
+        if (!window.jspdf) throw new Error('PDF tool didn’t load — check your connection and reload');
+        const blob = buildInvoicePdf(inv, settings);
         file = new File([blob], filename, { type: 'application/pdf' });
         setPdfFile(file);
       }
@@ -765,10 +866,6 @@ function InvoiceViewer({ inv, settings, onClose, onBank, onTogglePaid }) {
             <InvoiceDocument inv={inv} settings={settings} />
           </div>
           <p className="text-center text-xs text-stone-600 mt-4 mb-8">Save PDF creates an A4 file{navigator.canShare ? ' and opens the share sheet — choose Save to Files, Mail or WhatsApp' : ''}. Print works on desktop browsers.</p>
-        </div>
-        {/* Fixed-width copy used to build the PDF, kept off-screen. */}
-        <div aria-hidden="true" style={{ position: 'fixed', left: '-10000px', top: 0, width: '720px', pointerEvents: 'none' }}>
-          <div ref={docRef} style={{ width: '720px', background: '#fff' }}><InvoiceDocument inv={inv} settings={settings} flush /></div>
         </div>
       </div>
     </>
