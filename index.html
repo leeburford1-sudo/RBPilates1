@@ -33,6 +33,7 @@
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script>window.react = window.React;</script>
 <script src="https://unpkg.com/lucide-react@0.263.1/dist/umd/lucide-react.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
 <style>
   html, body { background: #FAF7F2; }
@@ -583,11 +584,11 @@ function LogTab({ db, actions }) {
 /* ------------------------------------------------------------------ */
 /* Invoices                                                            */
 /* ------------------------------------------------------------------ */
-function InvoiceDocument({ inv, settings }) {
+function InvoiceDocument({ inv, settings, flush }) {
   const b = settings.bank;
   const addr = (settings.address || '').split(',').map((x) => x.trim()).filter(Boolean);
   return (
-    <div className="invoice-doc bg-white text-stone-900 p-6 sm:p-12 text-[13px] leading-relaxed" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <div className={cx('invoice-doc bg-white text-stone-900 text-[13px] leading-relaxed', !flush && 'p-6 sm:p-12')} style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
       <div className="flex flex-col sm:flex-row sm:justify-between gap-6">
         <div>
           <div className="font-serif text-[40px] leading-none tracking-wide" style={{ color: '#384C41' }}>{settings.businessName}</div>
@@ -680,6 +681,14 @@ function InvoiceViewer({ inv, settings, onClose, onBank, onTogglePaid }) {
     return () => { window.removeEventListener('keydown', h); document.body.style.overflow = prev; };
   }, []);
   const bankMissing = !settings.bank.sortCode || !settings.bank.accountNumber;
+  const docRef = useRef(null);
+  const [pdfState, setPdfState] = useState('idle'); // idle | busy | ready
+  const [pdfFile, setPdfFile] = useState(null);
+  const filename = `${inv.number}.pdf`;
+
+  // Reset any generated PDF if the invoice or bank details change.
+  useEffect(() => { setPdfFile(null); setPdfState('idle'); }, [inv, settings]);
+
   const print = () => {
     const prev = document.title;
     document.title = `${inv.number} - ${inv.recipientName}`;
@@ -687,6 +696,48 @@ function InvoiceViewer({ inv, settings, onClose, onBank, onTogglePaid }) {
     window.addEventListener('afterprint', restore);
     window.print();
   };
+
+  const deliver = async (file) => {
+    // iPhone / iPad / Android: open the share sheet (Save to Files, Mail, WhatsApp, Print…).
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: inv.number });
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url; a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  };
+
+  const savePdf = async () => {
+    if (pdfState === 'busy') return;
+    try {
+      let file = pdfFile;
+      if (!file) {
+        if (!window.html2pdf) throw new Error('PDF tool didn’t load — check your connection and reload');
+        setPdfState('busy');
+        const blob = await window.html2pdf().set({
+          margin: [14, 14, 14, 14],
+          filename,
+          image: { type: 'jpeg', quality: 0.96 },
+          html2canvas: { scale: 2, windowWidth: 900, backgroundColor: '#ffffff', useCORS: true },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' },
+        }).from(docRef.current).outputPdf('blob');
+        file = new File([blob], filename, { type: 'application/pdf' });
+        setPdfFile(file);
+      }
+      setPdfState('ready');
+      await deliver(file);
+    } catch (err) {
+      if (err && err.name === 'AbortError') return; // share sheet dismissed
+      if (err && err.name === 'NotAllowedError') return; // iOS needs a fresh tap — button now says "Share PDF"
+      setPdfState('idle');
+      alert(`Couldn’t create the PDF: ${err && err.message ? err.message : err}`);
+    }
+  };
+  const pdfLabel = pdfState === 'busy' ? 'Creating…' : pdfState === 'ready' ? 'Share PDF' : 'Save PDF';
   return (
     <>
       {ReactDOM.createPortal(<InvoiceDocument inv={inv} settings={settings} />, document.getElementById('print-root'))}
@@ -699,8 +750,9 @@ function InvoiceViewer({ inv, settings, onClose, onBank, onTogglePaid }) {
           </div>
           <div className="ml-auto flex gap-2">
             <Btn variant="outline" size="sm" icon="Landmark" onClick={onBank}><span className="hidden sm:inline">Bank details</span></Btn>
-            <Btn variant="outline" size="sm" icon={inv.status === 'Paid' ? 'RotateCcw' : 'CheckCircle2'} onClick={onTogglePaid}>{inv.status === 'Paid' ? 'Mark unpaid' : 'Mark paid'}</Btn>
-            <Btn variant="primary" size="sm" icon="Printer" onClick={print}>Print / PDF</Btn>
+            <Btn variant="outline" size="sm" icon={inv.status === 'Paid' ? 'RotateCcw' : 'CheckCircle2'} onClick={onTogglePaid} aria-label={inv.status === 'Paid' ? 'Mark unpaid' : 'Mark paid'}><span className="hidden sm:inline">{inv.status === 'Paid' ? 'Mark unpaid' : 'Mark paid'}</span></Btn>
+            <Btn variant="outline" size="sm" icon="Printer" onClick={print} aria-label="Print"><span className="hidden sm:inline">Print</span></Btn>
+            <Btn variant="primary" size="sm" icon={pdfState === 'ready' ? 'Share' : 'Download'} onClick={savePdf} disabled={pdfState === 'busy'}>{pdfLabel}</Btn>
           </div>
         </div>
         {bankMissing && (
@@ -712,7 +764,11 @@ function InvoiceViewer({ inv, settings, onClose, onBank, onTogglePaid }) {
           <div className="mx-auto max-w-[820px] shadow-2xl rounded-sm overflow-hidden">
             <InvoiceDocument inv={inv} settings={settings} />
           </div>
-          <p className="text-center text-xs text-stone-600 mt-4 mb-8">Choose “Save as PDF” in the print dialog. Browser headers and footers are removed automatically.</p>
+          <p className="text-center text-xs text-stone-600 mt-4 mb-8">Save PDF creates an A4 file{navigator.canShare ? ' and opens the share sheet — choose Save to Files, Mail or WhatsApp' : ''}. Print works on desktop browsers.</p>
+        </div>
+        {/* Fixed-width copy used to build the PDF, kept off-screen. */}
+        <div aria-hidden="true" style={{ position: 'fixed', left: '-10000px', top: 0, width: '720px', pointerEvents: 'none' }}>
+          <div ref={docRef} style={{ width: '720px', background: '#fff' }}><InvoiceDocument inv={inv} settings={settings} flush /></div>
         </div>
       </div>
     </>
